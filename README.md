@@ -29,8 +29,6 @@
 dotnet add package HDRezka.NET
 ```
 
-The package uses the `HdRezka` namespace
-
 ## Docs
 
 For task-oriented guides and troubleshooting, see the
