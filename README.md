@@ -1,458 +1,341 @@
-# HdRezkaApi
+# HDRezka.NET
 
-<a href="https://pypi.org/project/HdRezkaApi/"><img src="https://img.shields.io/pypi/v/HdRezkaApi"></a>
-<a href="https://superzombi.github.io/HdRezkaApi/"><img src="https://shields.io/badge/📖-Documentation-ffbc5c"></a>
-<a href="#donate"><img src="https://shields.io/badge/💲-Support_Project-2ea043"></a>
+An asynchronous .NET 10 library for working with HDRezka-compatible websites.
+It can load media metadata, enumerate translations and episodes, resolve video
+streams and subtitles, search the catalog, and share authentication cookies
+through a session
 
-## Install:
-```
-pip install HdRezkaApi
-```
+> The website has multiple mirrors and can change its markup or API without
+> notice. Pass the mirror URL you are allowed to access; this package does not
+> contain a hard-coded domain
 
-## Table of Contents:
-1. [Usage](#usage)
-2. [Film Information](#film-information)
-3. [Translators priority](#translators-priority)
-4. [getStream](#getstream)
-5. [getSeasonStreams](#getseasonstreams)
-6. [HdRezkaStream](#hdrezkastream)
-7. [HdRezkaStreamSubtitles](#hdrezkastreamsubtitles)
-8. [HdRezkaRating](#hdrezkarating)
-9. [Proxy](#proxy)
-10. [Cookies](#cookies)
-11. [HdRezkaSearch](#hdrezkasearch)
-12. [HdRezkaSession](#hdrezkasession)
+## Requirements
 
-<hr>
+- .NET 10 SDK
 
-## Usage
+## Installation
 
-```python
-from HdRezkaApi import HdRezkaApi
-from HdRezkaApi.types import TVSeries, Movie
-from HdRezkaApi.types import Film, Series, Cartoon, Anime
-
-url = "https://hdrezka.ag/   __YOUR_URL__   .html"
-
-rezka = HdRezkaApi(url)
-if not rezka.ok:
-	print("Error:", str(rezka.exception))
-	raise rezka.exception
-
-print(rezka.name)
-print(rezka.thumbnail)
-print( rezka.rating.value )
-print( rezka.rating.votes )
-print( rezka.translators )
-print( rezka.otherParts )
-print( rezka.seriesInfo )
-
-print(rezka.type)
-print(rezka.type == TVSeries == TVSeries() == "tv_series")
-
-print(rezka.category)
-print(rezka.category == Anime == Anime() == "anime")
-
-print( rezka.getStream()('720p') ) # if movie
-print( rezka.getStream('1', '1')('720p') )
-print( dict(rezka.getSeasonStreams('1')) )
+```shell
+dotnet add package HDRezka.NET
 ```
 
-## Film Information
+The package uses the `HdRezka` namespace
 
-| Attribute                        | Description                          |
-|----------------------------------|--------------------------------------|
-| <a id="film-id" href="#film-id">`self.id`</a>| Film ID                  |
-| <a id="film-name" href="#film-name">`self.name`</a>| Film name          |
-| <a id="film-description" href="#film-description">`self.description`</a>| Film description |
-| <a id="film-type" href="#film-type">`self.type`</a>| [`HdRezkaFormat`](#hdrezkaformat)|
-| <a id="film-category" href="#film-category">`self.category`</a>|[`HdRezkaCategory`](#hdrezkacategory)|
-| <a id="film-thumbnail" href="#film-thumbnail">`self.thumbnail`</a>      | Film thumbnail URL|
-| <a id="film-thumbnailhq" href="#film-thumbnailhq">`self.thumbnailHQ`</a>| Film thumbnail in high quality |
-| <a id="film-rating" href="#film-rating">`self.rating`</a> |[`HdRezkaRating`](#hdrezkarating) |
-| <a id="film-otherparts" href="#film-otherparts">`self.otherParts`</a>|Other parts of this film `[{Film_name: url}]`|
-| <a id="film-translators" href="#film-translators">`self.translators`</a>|[Translators dict by id](#translators)|
-| <a id="film-translators-names" href="#film-translators-names">`self.translators_names`</a>|[Translators dict by names](#translators_names)|
-| <a id="film-seriesinfo" href="#film-seriesinfo">`self.seriesInfo`</a>| [Series info](#seriesInfo) by translators|
-| <a id="film-episodesinfo" href="#film-episodesinfo">`self.episodesInfo`</a>|All [seasons and episodes](#episodesInfo)|
+## Load a movie or series
 
-#### `translators`
-```
+Use a session when performing more than one request:
+
+```csharp
+using HdRezka;
+
+using var session = new Client("https://your-mirror.example");
+var authentication = await session.LoginAsync(
+    "mail@example.com",
+    "password",
+    rememberMe: true);
+
+Console.WriteLine(authentication.IsAuthenticated);
+Console.WriteLine(authentication.AccountTier);
+using var media = await session.GetAsync("/films/drama/123-title.html");
+
+Console.WriteLine(media.Name);
+Console.WriteLine(media.Description);
+Console.WriteLine(media.Thumbnail);
+Console.WriteLine(media.Rating.Value);
+Console.WriteLine(media.Rating.Votes);
+Console.WriteLine(media.Format);
+Console.WriteLine(media.Category);
+
+foreach (var translator in media.TranslationOptions)
 {
-	Translator_id: {
-		name: Translator_name,
-		premium: bool
-	}
-}
-```
-#### `translators_names`
-```
-{
-	Translator_name: {
-		id: Translator_id,
-		premium: bool
-	}
+    Console.WriteLine(
+        $"{translator.Id}: {translator.Name}, Premium: {translator.IsPremium}");
 }
 ```
 
-#### `seriesInfo`
+`TranslationOptions` preserves every website entry even when normal and
+director's-cut variants share the same numeric ID. `Translators` remains
+available as a compatibility view containing the first variant for each ID
+
+For a single page, a session is optional:
+
+```csharp
+using var media = await Media.CreateAsync(
+    "https://your-mirror.example/films/drama/123-title.html");
 ```
+
+All network methods accept a `CancellationToken`.
+
+## Streams
+
+For a movie:
+
+```csharp
+var stream = await media.GetStreamAsync();
+var hdUrls = stream.GetUrls("720");
+
+foreach (var url in hdUrls)
 {
-	Translator_id: {
-		translator_name,
-		seasons: {1, 2},
-		episodes: {
-			1: {1, 2, 3},
-			2: {1, 2, 3}
-		}
-	}
+    Console.WriteLine(url);
 }
 ```
 
-#### `episodesInfo`
-```
-[
-	{
-		season: 1, season_text,
-		episodes: [
-			{
-				episode: 1, episode_text,
-				translations: [
-					{translator_id, translator_name, premium}
-				]
-			}
-		]
-	}
-]
-```
+The returned URLs can contain direct MP4 files and HLS playlists. Player
+metadata also exposes the default quality, default subtitle, timeline preview,
+and premium-content marker when the website returns them
 
-<hr>
+## HDRezka Premium
 
-### HdRezkaFormat
+The subscription tier is detected from the authenticated page:
 
-Parent of classes: `TVSeries` and `Movie`
-```python
-from HdRezkaApi.types import TVSeries, Movie
-rezka.type == TVSeries == TVSeries() == "tv_series"
+```csharp
+var state = await session.GetAuthenticationStateAsync();
+
+Console.WriteLine(state.AccountTier);
+Console.WriteLine(state.IsPremium);
+Console.WriteLine(media.IsPremiumAccount);
 ```
 
-### HdRezkaCategory
+`AccountTier.Unknown` means that the website did not provide a recognizable
+account token. It is not treated as proof of Premium access
 
-Parent of classes: `Film`, `Series`, `Cartoon`, `Anime`
-```python
-from HdRezkaApi.types import Film, Series, Cartoon, Anime
-rezka.category == Anime == Anime() == "anime"
-```
+Premium translations remain visible through `TranslationOptions`. Automatic
+selection skips them on a standard account. Selecting one explicitly throws
+`PremiumRequiredException` before the player request is sent
 
-<hr>
+The player can return `1080p Ultra`, `2K`, and `4K` entries to a standard
+account together with protected URLs. The library keeps those entries as
+metadata but does not expose their URLs:
 
-### Translators priority
-```python
-rezka = HdRezkaApi(url, translators_priority:list, translators_non_priority:list)
-# or
-rezka.translators_priority = new_value
-rezka.translators_non_priority = new_value
-```
-#### `translators_priority`
-Priority of translators IDs, where the further to the left, the more desirable the translation.
-
-#### `translators_non_priority`
-Priority of unwanted translator identifiers, where the further to the right, the less desirable the translation.
-
-### sort_translators
-```python
-sort_translators(
-	translators=self.translators,
-	priority=self.translators_priority,
-	non_priority=self.translators_non_priority
-)
-```
-
-<hr>
-
-### getStream
-```python
-getStream(season, episode, translation=None, priority=None, non_priority=None)
-```
-```python
-getStream(
-	translation='Дубляж' or translation='56'
-)
-```
-If type is movie then there is no need to specify season and episode.
-```python
-stream = rezka.getStream() # if movie
-```
-#### [`priority` and `non_priority`](#translators-priority)
-<hr>
-
-### getSeasonStreams
-```python
-getSeasonStreams(season, translation=None, ignore=False, progress=None, priority=None, non_priority=None)
-```
-```python
-getSeasonStreams(
-	translation='Дубляж' or translation='56'
-)
-```
-
-#### [`priority` and `non_priority`](#translators-priority)
-#### `ignore` - ignore errors
-#### `progress` - callback function
-
-```python
-def progress(current, all):
-	percent = round(current * 100 / all)
-	print(f"{percent}%: {current}/{all}", end="\r")
-
-print( dict(rezka.getSeasonStreams(1, ignore=True, progress=progress)) )
-```
-
-Output example:
-```
-{'1': <HdRezkaStream(season:1, episode:1)>, '2': <HdRezkaStream(season:1, episode:2)>, ...}
-```
-
-If an error occurs, an attempt will be made to repeat the request again.<br>
-But if the error occurs again, then `None` will be added to the final dict.<br>
-To ignore errors and retry requests until a response is received, specify the `ignore=True` option.
-
-```python
-for i, stream in rezka.getSeasonStreams('1'):
-	print(stream)
-```
-
-<hr>
-
-# HdRezkaStream
-
-| Attribute              | Description                                             |
-|------------------------|---------------------------------------------------------|
-|<a id="stream-videos" href="#stream-videos">`self.videos`</a>|Dict of videos where the key is resolution and value is list of URLs|
-|<a id="stream-name" href="#stream-name">`self.name`</a>| Film name                |
-|<a id="stream-translatorid" href="#stream-translatorid">`self.translator_id`</a>  | Translator ID |
-|<a id="stream-season" href="#stream-season">`self.season`</a> | Season number (`None` if film)    |
-|<a id="stream-episode" href="#stream-episode">`self.episode`</a>| Episode number (`None` if film) |
-|<a id="stream-subtitles" href="#stream-subtitles">`self.subtitles`</a>| [HdRezkaStreamSubtitles](#hdrezkastreamsubtitles) object|
-|<a id="stream-call" href="#stream-call">`HdRezkaStream(resolution)`</a>|Call object with argument to get the URL of the video|
-
-### Usage examples:
-
-```python
-stream = rezka.getStream(1, 5)
-
-print( stream('720p') )
-print( stream('720') )
-print( stream(1080) )
-print( stream('Ultra') )
-print( stream('1080p Ultra') )
-print( stream.videos )
-```
-```
+```csharp
+foreach (var quality in stream.Qualities.Values)
 {
-	'360p': ['https://sambray.org/...mp4', 'https://stream.voidboost.cc/...mp4'],
-	'480p': ['https://sambray.org/...mp4', 'https://stream.voidboost.cc/...mp4'],
-	'720p': ['https://sambray.org/...mp4', 'https://stream.voidboost.cc/...mp4'],
+    Console.WriteLine(
+        $"{quality.Name}: Premium={quality.RequiresPremium}, Available={quality.IsAvailable}");
+}
+
+var availableUrls = stream.Videos;
+```
+
+`Videos` contains only available qualities. Calling `GetUrls("4K")` without
+confirmed Premium access throws `PremiumRequiredException`
+
+For a series:
+
+```csharp
+var stream = await media.GetStreamAsync(season: 1, episode: 5);
+```
+
+A translation can be selected by ID or exact name:
+
+```csharp
+var byId = await media.GetStreamAsync(1, 5, translation: "56");
+var byName = await media.GetStreamAsync(1, 5, translation: "Дубляж");
+```
+
+Without an explicit translation, the configured priority is used. The defaults
+are `56`, `105`, and `111`; translator `238` is non-preferred
+
+```csharp
+media.PreferredTranslators.Clear();
+media.PreferredTranslators.Add(111);
+media.NonPreferredTranslators.Add(999);
+```
+
+Load every episode stream from one season:
+
+```csharp
+var progress = new Progress<SeasonDownloadProgress>(value =>
+    Console.WriteLine($"{value.Completed}/{value.Total}"));
+
+var streams = await media.GetSeasonStreamsAsync(
+    season: 1,
+    progress: progress,
+    cancellationToken: cancellationToken);
+```
+
+Each failed episode is retried once. After the second failure the result for
+that episode is `null`. Set `ignoreErrors: true` to keep retrying until success
+or cancellation
+
+## Seasons and episodes
+
+Data for one translator:
+
+```csharp
+var info = await media.GetSeriesInfoAsync("56");
+```
+
+Data for every translator:
+
+```csharp
+var infoByTranslator = await media.GetSeriesInfoAsync();
+```
+
+Merged seasons and episodes:
+
+```csharp
+var seasons = await media.GetEpisodesInfoAsync();
+
+foreach (var season in seasons)
+{
+    foreach (var episode in season.Episodes)
+    {
+        Console.WriteLine($"S{season.Number}E{episode.Number}: {episode.Title}");
+        foreach (var translation in episode.Translations)
+        {
+            Console.WriteLine($"  {translation.TranslatorId}: {translation.TranslatorName}");
+        }
+    }
 }
 ```
 
+Results are cached for the lifetime of the loaded `Media` instance. Loading one
+stream or season queries only the selected translator. The all-translator
+overloads perform the explicit catalog-wide aggregation
 
-# HdRezkaStreamSubtitles
-| Attribute              | Description                   |
-|------------------------|-------------------------------|
-|<a id="subtitles" href="#subtitles">`self.subtitles`</a>|Dict of subtitles where the key is the language code and value is the subtitle information|
-| <a id="subtitles-keys" href="#subtitles-keys">`self.keys`</a>|List of available subtitle language codes|
-| <a id="subtitles-call" href="#subtitles-call">`self(id)`</a> |Call object with argument to get URL of subtitles|
+## Subtitles
 
-### Usage examples:
+```csharp
+var stream = await media.GetStreamAsync(1, 5);
 
-```python
-stream = rezka.getStream(1, 5)
-
-print( stream.subtitles.subtitles )  # { 'en': {'title': 'English', 'link': 'https:/'}, ...  }
-print( stream.subtitles.keys )       # ['en', 'ru']
-print( stream.subtitles('en') )      # 'https:/'
-print( stream.subtitles('English') ) # 'https:/'
-print( stream.subtitles(0) )         # 'https:/'
-#                       ^ index
+Console.WriteLine(string.Join(", ", stream.Subtitles.Languages));
+var english = stream.Subtitles.GetUrl("en");
+var byTitle = stream.Subtitles.GetUrl("English");
+var first = stream.Subtitles.GetUrl(0);
 ```
 
+`GetUrl(string)` accepts either a language code or a subtitle title
 
-# HdRezkaRating
-| Attribute                         | Description                                      |
-|-----------------------------------|--------------------------------------------------|
-| <a id="rating-value" href="#rating-value">`self.value`</a> | Rating value (`float`)  |
-| <a id="rating-votes" href="#rating-votes">`self.votes`</a> | Number of votes (`int`) |
+## Search
 
-<hr>
+Fast AJAX search:
 
-# Proxy
-```python
-rezka = HdRezkaApi(url, proxy={'http': 'http://192.168.0.1:80'})
-```
-
-# Cookies
-```python
-rezka = HdRezkaApi(url, cookies={"dle_user_id": user_id, "dle_password": password_hash})
-```
-If you are not sure:
-```python
-rezka = HdRezkaApi(url, cookies=HdRezkaApi.make_cookies(user_id, password_hash))
-```
-Manually login:
-```python
-rezka = HdRezkaApi(url)
-rezka.login("your_email@gmail.com", "your_password1234")
-```
-<hr>
-
-# HdRezkaSearch
-`HdRezkaSearch(origin, proxy, headers, cookies)(query, find_all=False)`
-### Fast search
-```python
-from HdRezkaApi.search import HdRezkaSearch
-results = HdRezkaSearch("https://hdrezka.ag/")("film name")
-```
-```
-[
-	{
-		'title': 'Film name',
-		'url': 'https://hdrezka.ag/__FILM_URL.html',
-		'rating': 7.8
-	}
-]
-```
-### Advanced search
-```python
-from HdRezkaApi.search import HdRezkaSearch
-results = HdRezkaSearch("https://hdrezka.ag/", cookies)("film name", find_all=True)
-for page in results:
-	for result in page:
-		print(result)
-```
-```
+```csharp
+var results = await session.SearchAsync("Film name");
+foreach (var result in results)
 {
-	'title': 'Film name',
-	'url': 'https://hdrezka.ag/__FILM_URL.html',
-	'image': 'https://hdrezka.ag/image.jpg',
-	'category': HdRezkaCategory()
+    Console.WriteLine($"{result.Title}: {result.Url} ({result.Rating})");
 }
 ```
 
-#### HdRezkaCategory
+Full search:
 
-`Series`, `Film`, `Cartoon`, `Anime`.
-
-#### All pages
-```python
-print(results.all_pages)
-```
-```
-[
-	[ {'title', 'url', 'image', 'category'}, ...],
-	[ {'title', 'url', 'image', 'category'}, ...],
-	...
-]
-```
-#### Flatten results
-```python
-print(results.all)
-```
-```
-[
-	{'title', 'url', 'image', 'category'},
-	{'title', 'url', 'image', 'category'},
-	...
-]
-```
-#### Specific page
-```python
-print(results.get_page(2)) # page number
-# or
-print(results[1]) # index
+```csharp
+var page = await session.SearchPageAsync("Film name", page: 2);
+var all = await session.SearchAllAsync("Film name", maximumPages: 10);
 ```
 
-[Searching with session](#searching-with-session)
-<hr>
+`maximumPages` is optional. When omitted, pages are loaded until the website
+returns an empty page
 
+A standalone search client is also available:
 
-# HdRezkaSession
-HdRezkaSession allows you to log in once and not send login requests every time.
-
-You can also specify origin to make requests to a same site. Origin in full urls will be ignored.<br>
-In the next example, the request will be made to the url: `"https://rezka_mirror.com/__YOUR_URL__.html"`
-```python
-from HdRezkaApi import HdRezkaSession
-```
-```python
-with HdRezkaSession("https://rezka_mirror.com/") as session:
-	session.login("email@gmail.com", "password")
-	rezka = session.get("https://hdrezka.ag/__URL_PATH__.html")
-```
-Also when specifying origin you can specify only url path.
-```python
-with HdRezkaSession("https://rezka_mirror.com/") as session:
-	rezka = session.get("__URL_PATH__.html")
-```
-<br>
-
-You can also not specify origin and then requests will be made to the URL you specified.<br>
-But then you won't be able to use login().
-```python
-with HdRezkaSession() as session:
-	rezka = session.get("https://hdrezka.ag/__URL_PATH__.html")
-```
-```python
-with HdRezkaSession(cookies=cookies, headers=headers, proxy=proxy) as session:
-	# or inline seting up
-	session.cookies = cookies
-	session.headers = headers
-	session.proxy = proxy
-```
-#### [`translators_priority`](#translators-priority)
-```python
-with HdRezkaSession(translators_priority, translators_non_priority) as session:
-	# or inline seting up
-	session.translators_priority = new_value
-	session.translators_non_priority = new_value
+```csharp
+using var search = new SearchClient("https://your-mirror.example");
+var results = await search.FastSearchAsync("Film name");
 ```
 
-### Searching with session
-#### Fast search
-```python
-with HdRezkaSession("https://rezka_mirror.com/") as session:
-	results = session.search("film name")
+## Authentication, cookies, headers, and proxy
+
+Credential-based login reproduces the website flow: it sends
+`POST /ajax/login/`, stores the returned session cookies in a real
+`CookieContainer`, and verifies the session against `/favorites/`
+
+```csharp
+var options = new ClientOptions();
+options.Headers["X-Custom-Header"] = "value";
+options.Proxy = new WebProxy("http://127.0.0.1:8080");
+
+using var session = new Client(
+    "https://your-mirror.example",
+    options);
+
+var login = await session.LoginAsync(
+    "mail@example.com",
+    "password",
+    rememberMe: true);
+
+if (!login.IsAuthenticated)
+{
+    throw new InvalidOperationException("Login was not verified.");
+}
+
+var current = await session.GetAuthenticationStateAsync();
+var logout = await session.LogoutAsync();
 ```
-#### Advanced search
-```python
-with HdRezkaSession("https://rezka_mirror.com/") as session:
-	session.login("email@gmail.com", "password")
-	results = session.search("film name", find_all=True)
-	for page in results:
-		for result in page:
-			print(result)
+
+`rememberMe: true` maps to the website's `login_not_save=0` behavior. The
+authentication result exposes cookie names for diagnostics, but never cookie
+values
+
+Existing authentication cookies can still be imported explicitly when
+restoring a previously saved session:
+
+```csharp
+foreach (var cookie in AuthenticationCookies.Create(userId, passwordHash))
+{
+    options.Cookies[cookie.Key] = cookie.Value;
+}
 ```
-[More info](#hdrezkasearch)
 
-<hr>
+When supplying your own `HttpClient`, configure its handler if you need a
+proxy. Compressed responses are handled by the library, and the injected
+client is never disposed
 
-## 💲Donate
+## Architecture
 
-<table>
-	<tr>
-		<td>
-			<img width="18px" src="https://www.google.com/s2/favicons?domain=https://donatello.to&sz=256">
-		</td>
-		<td>
-			<a href="https://donatello.to/super_zombi">Donatello</a>
-		</td>
-	</tr>
-	<tr>
-		<td>
-		<img width="18px" src="https://www.google.com/s2/favicons?domain=https://www.donationalerts.com&sz=256">
-		</td>
-		<td>
-		<a href="https://www.donationalerts.com/r/super_zombi">Donation Alerts</a>
-		</td>
-	</tr>
-</table>
+Production code is compiled into one `HDRezka.NET` assembly. Logical
+responsibilities remain separated by directories without introducing extra
+projects or NuGet dependencies:
+
+- `Client`: client entry point, options, authentication state, and cookie helpers
+- `Media`: media facade, streams, subtitles, translators, seasons, and episodes
+- `Search`: search client and result models
+- `Exceptions`: public library exceptions
+- `Abstractions`: internal contracts shared by the client and parsers
+- `Http`: HTTP transport, `CookieContainer`, and response decompression
+- `Scraping`: AngleSharp page parsing and authentication page inspection
+- `Translators`: automatic translator ordering and selection
+
+All public types remain in the single `HdRezka` namespace regardless of their
+feature directory
+
+## Exceptions
+
+Library-specific failures derive from `ApiException`:
+
+- `LoginRequiredException`
+- `LoginFailedException`
+- `PremiumRequiredException`
+- `CaptchaException`
+- `StreamFetchException`
+- `HttpException`
+- `ParseException`
+
+Invalid method arguments use standard .NET exceptions such as
+`ArgumentException`, `ArgumentOutOfRangeException`, and
+`InvalidOperationException`
+
+## Build, test, and pack
+
+```shell
+dotnet build HDRezka.NET.slnx --configuration Release
+dotnet test HDRezka.NET.slnx --configuration Release
+dotnet pack src/HDRezka.NET/HDRezka.NET.csproj \
+  --configuration Release \
+  --output artifacts
+```
+
+The live integration test is opt-in and does not store credentials:
+
+```shell
+HDREZKA_TEST_EMAIL="mail@example.com" \
+HDREZKA_TEST_PASSWORD="password" \
+HDREZKA_TEST_ORIGIN="https://your-mirror.example" \
+dotnet test tests/HDRezka.NET.IntegrationTests \
+  --configuration Release \
+  --filter "Category=Live"
+```
+
+The package targets only `net10.0`.

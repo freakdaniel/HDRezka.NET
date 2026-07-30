@@ -8,19 +8,19 @@ body:
       label: ✅ Confirmation Checklist
       description: Please confirm all the statements below
       options:
-        - label: I confirm that this bug is related to the **HdRezkaApi** library.
+        - label: I confirm that this bug is related to the **HDRezka.NET** library
           required: true
-        - label: I confirm that I am using the **latest version** of <a href="https://pypi.org/project/HdRezkaApi/"><img src="https://img.shields.io/pypi/v/HdRezkaApi?label=HdRezkaApi"></a>.<br>(`pip show HdRezkaApi`)
+        - label: I confirm that I am using the latest version of **HDRezka.NET** from NuGet
           required: true
-        - label: I confirm that this is **not a duplicate**, and I have searched [**existing issues**](https://github.com/SuperZombi/HdRezkaApi/issues?q=is%3Aissue).
+        - label: I confirm that this is **not a duplicate**, and I have searched [**existing issues**](https://github.com/freakdaniel/HDRezka.NET/issues?q=is%3Aissue)
           required: true
 
   - type: textarea
     id: overview
     attributes:
       label: 📝 Overview
-      description: Describe the problem or unexpected behavior.
-      placeholder: A clear and concise description of what the bug is.
+      description: Describe the problem or unexpected behavior
+      placeholder: A clear and concise description of what the bug is
     validations:
       required: true
 
@@ -28,7 +28,7 @@ body:
     id: steps
     attributes:
       label: 🧪 Steps to Reproduce
-      description: List the steps to reproduce the issue.
+      description: List the steps to reproduce the issue
       placeholder: |
         1. Run this code...
         2. Open this URL...
@@ -40,8 +40,8 @@ body:
     id: code
     attributes:
       label: 📄 Code Sample (including the movie URL)
-      description: Provide a minimal reproducible code sample.
-      render: python
+      description: Provide a minimal reproducible code sample
+      render: csharp
       placeholder: your code here
     validations:
       required: true
@@ -50,7 +50,7 @@ body:
     id: logs
     attributes:
       label: 📋 Logs
-      description: Paste any relevant logs here.
+      description: Paste any relevant logs here
       render: text
       placeholder: logs here
     validations:
@@ -60,7 +60,7 @@ body:
     id: additional
     attributes:
       label: 💡 Additional Information
-      description: Add any other context or screenshots that might help.
-      placeholder: Optional – screenshots, environment, OS, Python version, etc.
+      description: Add any other context or screenshots that might help
+      placeholder: Optional\:\ screenshots, environment, OS, .NET SDK version, etc.
     validations:
       required: false

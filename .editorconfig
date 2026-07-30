@@ -1,0 +1,18 @@
+root = true
+
+[*.cs]
+dotnet_style_namespace_match_folder = true
+dotnet_diagnostic.IDE0130.severity = error
+
+# Public API is grouped by feature while remaining in the single HdRezka namespace
+[src/HDRezka.NET/Client/*.cs]
+dotnet_style_namespace_match_folder = false
+
+[src/HDRezka.NET/Media/*.cs]
+dotnet_style_namespace_match_folder = false
+
+[src/HDRezka.NET/Search/*.cs]
+dotnet_style_namespace_match_folder = false
+
+[src/HDRezka.NET/Exceptions/*.cs]
+dotnet_style_namespace_match_folder = false

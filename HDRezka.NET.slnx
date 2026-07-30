@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/HDRezka.NET/HDRezka.NET.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/HDRezka.NET.Tests/HDRezka.NET.Tests.csproj" />
+    <Project Path="tests/HDRezka.NET.IntegrationTests/HDRezka.NET.IntegrationTests.csproj" />
+  </Folder>
+</Solution>

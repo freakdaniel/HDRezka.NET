@@ -1,0 +1,34 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Restore
+        run: dotnet restore HDRezka.NET.slnx
+
+      - name: Build
+        run: dotnet build HDRezka.NET.slnx --configuration Release --no-restore
+
+      - name: Test
+        run: dotnet test HDRezka.NET.slnx --configuration Release --no-build
+
+      - name: Pack
+        run: >
+          dotnet pack src/HDRezka.NET/HDRezka.NET.csproj
+          --configuration Release
+          --no-build
+          --output artifacts
