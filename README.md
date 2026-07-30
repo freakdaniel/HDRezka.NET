@@ -1,12 +1,16 @@
 # HDRezka.NET
 
-An asynchronous .NET 10 library for working with HDRezka-compatible websites.
-It can load media metadata, enumerate translations and episodes, resolve video
+An asynchronous .NET 10 library for working with HDRezka-compatible websites
+that can load media metadata, enumerate translations and episodes, resolve video
 streams and subtitles, search the catalog, and share authentication cookies
 through a session
 
+For task-oriented guides and troubleshooting, see the
+[project wiki](https://github.com/freakdaniel/HDRezka.NET/wiki), published
+automatically from [`docs/wiki`](docs/wiki) on `main`
+
 > The website has multiple mirrors and can change its markup or API without
-> notice. Pass the mirror URL you are allowed to access; this package does not
+> notice, so pass the mirror URL you are allowed to access; this package does not
 > contain a hard-coded domain
 
 ## Requirements
@@ -54,7 +58,7 @@ foreach (var translator in media.TranslationOptions)
 ```
 
 `TranslationOptions` preserves every website entry even when normal and
-director's-cut variants share the same numeric ID. `Translators` remains
+director's-cut variants share the same numeric ID, while `Translators` remains
 available as a compatibility view containing the first variant for each ID
 
 For a single page, a session is optional:
@@ -64,7 +68,7 @@ using var media = await Media.CreateAsync(
     "https://your-mirror.example/films/drama/123-title.html");
 ```
 
-All network methods accept a `CancellationToken`.
+All network methods accept a `CancellationToken`
 
 ## Streams
 
@@ -80,7 +84,7 @@ foreach (var url in hdUrls)
 }
 ```
 
-The returned URLs can contain direct MP4 files and HLS playlists. Player
+The returned URLs can contain direct MP4 files and HLS playlists, while player
 metadata also exposes the default quality, default subtitle, timeline preview,
 and premium-content marker when the website returns them
 
@@ -97,14 +101,14 @@ Console.WriteLine(media.IsPremiumAccount);
 ```
 
 `AccountTier.Unknown` means that the website did not provide a recognizable
-account token. It is not treated as proof of Premium access
+account token and is not treated as proof of Premium access
 
-Premium translations remain visible through `TranslationOptions`. Automatic
-selection skips them on a standard account. Selecting one explicitly throws
+Premium translations remain visible through `TranslationOptions`, while automatic
+selection skips them on a standard account and selecting one explicitly throws
 `PremiumRequiredException` before the player request is sent
 
 The player can return `1080p Ultra`, `2K`, and `4K` entries to a standard
-account together with protected URLs. The library keeps those entries as
+account together with protected URLs, but the library keeps those entries as
 metadata but does not expose their URLs:
 
 ```csharp
@@ -117,7 +121,7 @@ foreach (var quality in stream.Qualities.Values)
 var availableUrls = stream.Videos;
 ```
 
-`Videos` contains only available qualities. Calling `GetUrls("4K")` without
+`Videos` contains only available qualities, while calling `GetUrls("4K")` without
 confirmed Premium access throws `PremiumRequiredException`
 
 For a series:
@@ -133,7 +137,7 @@ var byId = await media.GetStreamAsync(1, 5, translation: "56");
 var byName = await media.GetStreamAsync(1, 5, translation: "Дубляж");
 ```
 
-Without an explicit translation, the configured priority is used. The defaults
+Without an explicit translation, the configured priority is used with defaults
 are `56`, `105`, and `111`; translator `238` is non-preferred
 
 ```csharp
@@ -154,8 +158,8 @@ var streams = await media.GetSeasonStreamsAsync(
     cancellationToken: cancellationToken);
 ```
 
-Each failed episode is retried once. After the second failure the result for
-that episode is `null`. Set `ignoreErrors: true` to keep retrying until success
+Each failed episode is retried once, after which the result for
+that episode is `null` on another failure Set `ignoreErrors: true` to keep retrying until success
 or cancellation
 
 ## Seasons and episodes
@@ -190,8 +194,8 @@ foreach (var season in seasons)
 }
 ```
 
-Results are cached for the lifetime of the loaded `Media` instance. Loading one
-stream or season queries only the selected translator. The all-translator
+Results are cached for the lifetime of the loaded `Media` instance, while loading one
+stream or season queries only the selected translator and the all-translator
 overloads perform the explicit catalog-wide aggregation
 
 ## Subtitles
@@ -226,7 +230,7 @@ var page = await session.SearchPageAsync("Film name", page: 2);
 var all = await session.SearchAllAsync("Film name", maximumPages: 10);
 ```
 
-`maximumPages` is optional. When omitted, pages are loaded until the website
+`maximumPages` is optional and, when omitted, pages are loaded until the website
 returns an empty page
 
 A standalone search client is also available:
@@ -265,7 +269,7 @@ var current = await session.GetAuthenticationStateAsync();
 var logout = await session.LogoutAsync();
 ```
 
-`rememberMe: true` maps to the website's `login_not_save=0` behavior. The
+`rememberMe: true` maps to the website's `login_not_save=0` behavior, while the
 authentication result exposes cookie names for diagnostics, but never cookie
 values
 
@@ -280,12 +284,12 @@ foreach (var cookie in AuthenticationCookies.Create(userId, passwordHash))
 ```
 
 When supplying your own `HttpClient`, configure its handler if you need a
-proxy. Compressed responses are handled by the library, and the injected
+proxy, while compressed responses are handled by the library and the injected
 client is never disposed
 
 ## Architecture
 
-Production code is compiled into one `HDRezka.NET` assembly. Logical
+Production code is compiled into one `HDRezka.NET` assembly with logical
 responsibilities remain separated by directories without introducing extra
 projects or NuGet dependencies:
 
@@ -338,4 +342,4 @@ dotnet test tests/HDRezka.NET.IntegrationTests \
   --filter "Category=Live"
 ```
 
-The package targets only `net10.0`.
+The package targets only `net10.0`
