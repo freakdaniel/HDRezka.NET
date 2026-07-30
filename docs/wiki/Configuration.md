@@ -17,6 +17,22 @@ The client clones the supplied options, so later changes to the original object 
 not affect the client; use `client.Options` to update settings for subsequent
 requests
 
+## Concurrent requests
+
+Bulk operations use limited asynchronous concurrency:
+
+```csharp
+var options = new ClientOptions
+{
+    MaxConcurrentRequests = 4
+};
+```
+
+The limit applies to bookmark folders, full searches, translator catalogs, and
+whole-season stream loading. Increasing it can reduce latency on a fast mirror
+but also increases the chance of throttling. Dedicated worker threads are not
+needed because HTTP waiting is asynchronous
+
 ## Headers
 
 `Headers` is a case-insensitive mutable dictionary with a

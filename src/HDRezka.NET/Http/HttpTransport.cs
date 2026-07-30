@@ -57,7 +57,10 @@ internal sealed class HttpTransport : IHttpTransport
         }
 
         using var request = CreateRequest(HttpMethod.Get, uri);
-        using var response = await _client.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        using var response = await _client.SendAsync(
+            request,
+            HttpCompletionOption.ResponseHeadersRead,
+            cancellationToken).ConfigureAwait(false);
         return await ReadResponseAsync(response, uri, cancellationToken).ConfigureAwait(false);
     }
 
@@ -70,7 +73,10 @@ internal sealed class HttpTransport : IHttpTransport
         using var request = CreateRequest(HttpMethod.Post, uri);
         request.Headers.Referrer = referrer;
         request.Content = new FormUrlEncodedContent(data);
-        using var response = await _client.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        using var response = await _client.SendAsync(
+            request,
+            HttpCompletionOption.ResponseHeadersRead,
+            cancellationToken).ConfigureAwait(false);
         return await ReadResponseAsync(response, uri, cancellationToken).ConfigureAwait(false);
     }
 
@@ -80,6 +86,16 @@ internal sealed class HttpTransport : IHttpTransport
         CancellationToken cancellationToken = default)
     {
         var json = await PostFormAsync(uri, data, cancellationToken).ConfigureAwait(false);
+        return JsonSerializer.Deserialize<T>(json, JsonOptions) ??
+            throw new ParseException("The server returned an empty JSON response.");
+    }
+
+    public async Task<T> GetJsonAsync<T>(
+        Uri uri,
+        IReadOnlyDictionary<string, string?>? query = null,
+        CancellationToken cancellationToken = default)
+    {
+        var json = await GetStringAsync(uri, query, cancellationToken).ConfigureAwait(false);
         return JsonSerializer.Deserialize<T>(json, JsonOptions) ??
             throw new ParseException("The server returned an empty JSON response.");
     }
@@ -127,6 +143,11 @@ internal sealed class HttpTransport : IHttpTransport
         HttpContent content,
         CancellationToken cancellationToken)
     {
+        if (content.Headers.ContentEncoding.Count == 0)
+        {
+            return await content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+        }
+
         var bytes = await content.ReadAsByteArrayAsync(cancellationToken).ConfigureAwait(false);
         foreach (var encoding in content.Headers.ContentEncoding.Reverse())
         {

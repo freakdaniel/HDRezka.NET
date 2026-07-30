@@ -37,6 +37,47 @@ public sealed class SearchClientTests
         Assert.Equal(new Uri("https://hdrezka.test/covers/1.jpg"), result.ImageUrl);
     }
 
+    [Fact]
+    public async Task SearchAllAsync_LoadsDetectedPagesConcurrentlyInPageOrder()
+    {
+        var active = 0;
+        var maximumActive = 0;
+        using var httpClient = new HttpClient(new StubHttpHandler(async (request, cancellationToken) =>
+        {
+            var query = request.RequestUri!.Query;
+            var page = query.Contains("page=1", StringComparison.Ordinal)
+                ? 1
+                : query.Contains("page=2", StringComparison.Ordinal)
+                    ? 2
+                    : 3;
+            if (page > 1)
+            {
+                var current = Interlocked.Increment(ref active);
+                maximumActive = Math.Max(maximumActive, current);
+                await Task.Delay(30, cancellationToken);
+                Interlocked.Decrement(ref active);
+            }
+
+            return StubHttpHandler.Html(
+                FullSearchHtml
+                    .Replace("Test Anime", $"Page {page}", StringComparison.Ordinal)
+                    .Replace(
+                        "</body>",
+                        "<div class=\"b-navigation\"><a>3</a></div></body>",
+                        StringComparison.Ordinal));
+        }));
+        var options = new ClientOptions { MaxConcurrentRequests = 2 };
+        using var search = new SearchClient(
+            "https://hdrezka.test",
+            options,
+            httpClient);
+
+        var results = await search.SearchAllAsync("Test");
+
+        Assert.Equal(["Page 1", "Page 2", "Page 3"], results.Select(item => item.Title));
+        Assert.Equal(2, maximumActive);
+    }
+
     private const string FastSearchHtml = """
         <ul class="b-search__section_list">
           <li>

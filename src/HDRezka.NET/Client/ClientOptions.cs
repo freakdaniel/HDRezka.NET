@@ -7,6 +7,8 @@ namespace HdRezka;
 /// </summary>
 public sealed class ClientOptions
 {
+    private int _maxConcurrentRequests = 4;
+
     /// <summary>
     /// Gets the browser-like user agent included in new option instances
     /// </summary>
@@ -56,6 +58,25 @@ public sealed class ClientOptions
     public IWebProxy? Proxy { get; set; }
 
     /// <summary>
+    /// Gets or sets the maximum number of requests used by one bulk operation
+    /// </summary>
+    /// <value>
+    /// Positive request limit with a default value of <c>4</c>
+    /// </value>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// The assigned value is less than one
+    /// </exception>
+    public int MaxConcurrentRequests
+    {
+        get => _maxConcurrentRequests;
+        set
+        {
+            ArgumentOutOfRangeException.ThrowIfLessThan(value, 1);
+            _maxConcurrentRequests = value;
+        }
+    }
+
+    /// <summary>
     /// Gets translator identifiers placed first during automatic selection
     /// </summary>
     /// <value>
@@ -73,7 +94,11 @@ public sealed class ClientOptions
 
     internal ClientOptions Clone()
     {
-        var clone = new ClientOptions { Proxy = Proxy };
+        var clone = new ClientOptions
+        {
+            Proxy = Proxy,
+            MaxConcurrentRequests = MaxConcurrentRequests
+        };
         clone.Headers.Clear();
         foreach (var pair in Headers)
         {

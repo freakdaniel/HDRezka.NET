@@ -12,6 +12,7 @@ internal sealed record PageSnapshot(
     int? ReleaseYear,
     MediaFormat Format,
     MediaCategory Category,
+    MediaDetails Details,
     Rating Rating,
     AccountTier AccountTier,
     IReadOnlyList<Translator> TranslationOptions,

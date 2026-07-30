@@ -137,10 +137,11 @@ public sealed class AccountClient
             return [];
         }
 
-        var tasks = root.Folders
-            .Select(folder => LoadBookmarkFolderAsync(folder, root, cancellationToken))
-            .ToArray();
-        return await Task.WhenAll(tasks).ConfigureAwait(false);
+        return await AsyncUtilities.SelectAsync(
+            root.Folders,
+            _transport.Options.MaxConcurrentRequests,
+            (folder, token) => LoadBookmarkFolderAsync(folder, root, token),
+            cancellationToken).ConfigureAwait(false);
     }
 
     private async Task<BookmarkFolder> LoadBookmarkFolderAsync(

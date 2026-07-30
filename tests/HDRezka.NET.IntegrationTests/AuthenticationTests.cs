@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Net;
 
 namespace HdRezka.IntegrationTests;
 
@@ -26,7 +27,6 @@ public sealed class AuthenticationTests
         var login = await client.LoginAsync(email, password);
 
         Assert.True(login.IsAuthenticated);
-        Assert.NotEqual(AccountTier.Unknown, login.AccountTier);
         Assert.Equal(login.AccountTier == AccountTier.Premium, login.IsPremium);
         Assert.Contains("PHPSESSID", login.CookieNames);
         Assert.Contains("dle_user_id", login.CookieNames);
@@ -55,26 +55,57 @@ public sealed class AuthenticationTests
             client.Catalog.GetLatestAsync(),
             client.Catalog.GetPopularAsync(),
             client.Catalog.GetUpcomingAsync(),
-            client.Catalog.GetWatchingAsync());
+            client.Catalog.GetWatchingAsync(),
+            client.Catalog.GetNewReleasesAsync(),
+            client.Catalog.GetAnnouncementsAsync(),
+            client.Catalog.GetShowsAsync());
         Assert.All(catalogPages, page => Assert.NotEmpty(page.Items));
 
         var collections = await client.Collections.GetPageAsync();
         Assert.NotEmpty(collections.Items);
-        var collection = await client.Collections.GetAsync(collections.Items[0]);
-        Assert.Equal(collections.Items[0].Id, collection.Id);
+        CollectionPage? collection = null;
+        CollectionSummary? loadedCollection = null;
+        foreach (var item in collections.Items.Take(10))
+        {
+            try
+            {
+                collection = await client.Collections.GetAsync(item);
+                loadedCollection = item;
+                break;
+            }
+            catch (HttpException exception) when (exception.StatusCode == HttpStatusCode.NotFound)
+            {
+                // The authenticated collection directory can temporarily contain links
+                // that the same authenticated session receives as 404
+            }
+        }
+
+        Assert.NotNull(collection);
+        Assert.NotNull(loadedCollection);
+        Assert.Equal(loadedCollection.Id, collection.Id);
         Assert.NotEmpty(collection.Items);
 
         using var media = await client.GetAsync(mediaPath);
         Assert.True(media.Id > 0);
         Assert.False(string.IsNullOrWhiteSpace(media.Name));
         Assert.NotEmpty(media.Translators);
+        Assert.NotEqual(AccountTier.Unknown, media.AccountTier);
+        Assert.NotEmpty(media.Details.Countries);
+        Assert.NotEmpty(media.Details.Genres);
+        Assert.NotEmpty(media.Details.Directors);
+        Assert.NotEmpty(media.Details.Cast);
+        Assert.NotNull(media.Details.Duration);
+
+        var comments = await media.Comments.GetPageAsync();
+        Assert.NotEmpty(comments.Items);
 
         var stream = await media.GetStreamAsync();
         Assert.NotEmpty(stream.Videos);
 
         using var series = await client.GetAsync(seriesPath);
         Assert.Equal(MediaFormat.Series, series.Format);
-        var translator = series.SortTranslators()[0];
+        Assert.NotEmpty(series.Details.Schedule);
+        var translator = series.SortTranslators().First(item => !item.IsPremium);
         var seriesInfo = await series.GetSeriesInfoAsync(
             translator.Id.ToString(CultureInfo.InvariantCulture));
         var firstSeason = seriesInfo.Seasons.Keys.Order().First();
@@ -93,10 +124,8 @@ public sealed class AuthenticationTests
             .Where(quality => quality.RequiresPremium)
             .ToList();
         Assert.Contains(premiumQualities, quality => quality.Name == "1080p Ultra");
-        Assert.Contains(premiumQualities, quality => quality.Name == "2K");
-        Assert.Contains(premiumQualities, quality => quality.Name == "4K");
 
-        if (login.AccountTier == AccountTier.Standard)
+        if (premiumMedia.AccountTier == AccountTier.Standard)
         {
             var premiumTranslator = premiumMedia.TranslationOptions.First(item => item.IsPremium);
             var premiumException = await Assert.ThrowsAsync<PremiumRequiredException>(

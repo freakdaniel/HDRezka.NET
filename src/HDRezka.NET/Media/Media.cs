@@ -37,6 +37,7 @@ public sealed class Media : IDisposable
         Origin = new Uri(url.GetLeftPart(UriPartial.Authority));
 
         Id = page.Id;
+        Comments = new CommentClient(_transport, Url, Id);
         Names = page.Names;
         Name = page.Name;
         OriginalNames = page.OriginalNames;
@@ -47,6 +48,7 @@ public sealed class Media : IDisposable
         ReleaseYear = page.ReleaseYear;
         Format = page.Format;
         Category = page.Category;
+        Details = page.Details;
         Rating = page.Rating;
         AccountTier = page.AccountTier;
         TranslationOptions = page.TranslationOptions;
@@ -81,6 +83,11 @@ public sealed class Media : IDisposable
     /// Gets the numeric media identifier used by the website API
     /// </summary>
     public int Id { get; }
+
+    /// <summary>
+    /// Gets operations for loading paginated comments through the website AJAX endpoint
+    /// </summary>
+    public CommentClient Comments { get; }
 
     /// <summary>
     /// Gets the first localized title shown on the page
@@ -140,6 +147,11 @@ public sealed class Media : IDisposable
     /// Gets the catalog category inferred from the page URL
     /// </summary>
     public MediaCategory Category { get; }
+
+    /// <summary>
+    /// Gets extended metadata parsed from the already loaded media page
+    /// </summary>
+    public MediaDetails Details { get; }
 
     /// <summary>
     /// Gets the rating value and vote count parsed from the page
@@ -658,64 +670,92 @@ public sealed class Media : IDisposable
             nonPreferred,
             cancellationToken).ConfigureAwait(false);
         var episodeNumbers = seriesInfo.Episodes[season].Keys.Order().ToList();
-        var streams = new SortedDictionary<int, MediaStream?>();
         progress?.Report(new SeasonDownloadProgress(0, episodeNumbers.Count));
-
-        foreach (var episode in episodeNumbers)
-        {
-            var attempt = 0;
-            while (true)
+        var completed = 0;
+        var loaded = await AsyncUtilities.SelectAsync(
+            episodeNumbers,
+            _transport.Options.MaxConcurrentRequests,
+            async (episode, token) =>
             {
-                cancellationToken.ThrowIfCancellationRequested();
-                try
-                {
-                    streams[episode] = await FetchStreamAsync(
-                        season,
-                        episode,
-                        translator,
-                        "get_stream",
-                        cancellationToken).ConfigureAwait(false);
-                    break;
-                }
-                catch (Exception) when (attempt++ == 0)
-                {
-                    await Task.Delay(TimeSpan.FromSeconds(1), cancellationToken).ConfigureAwait(false);
-                }
-                catch (Exception) when (ignoreErrors)
-                {
-                    await Task.Delay(TimeSpan.FromSeconds(1), cancellationToken).ConfigureAwait(false);
-                }
-                catch (Exception)
-                {
-                    streams[episode] = null;
-                    break;
-                }
-            }
-
-            progress?.Report(new SeasonDownloadProgress(streams.Count, episodeNumbers.Count));
-        }
-
-        return streams;
+                var stream = await LoadEpisodeStreamWithRetryAsync(
+                    season,
+                    episode,
+                    translator,
+                    ignoreErrors,
+                    token).ConfigureAwait(false);
+                progress?.Report(
+                    new SeasonDownloadProgress(
+                        Interlocked.Increment(ref completed),
+                        episodeNumbers.Count));
+                return KeyValuePair.Create(episode, stream);
+            },
+            cancellationToken).ConfigureAwait(false);
+        return new SortedDictionary<int, MediaStream?>(
+            loaded.ToDictionary(pair => pair.Key, pair => pair.Value));
     }
 
     private async Task<IReadOnlyDictionary<int, SeriesInfo>> LoadSeriesInfoAsync()
     {
         var result = new Dictionary<int, SeriesInfo>();
-        foreach (var translator in GetTranslatorCandidates(
+        var translators = GetTranslatorCandidates(
             translation: null,
             preferred: null,
-            nonPreferred: null))
-        {
-            var info = await GetSeriesInfoForTranslatorAsync(
+            nonPreferred: null);
+        var information = await AsyncUtilities.SelectAsync(
+            translators,
+            _transport.Options.MaxConcurrentRequests,
+            (translator, _) => GetSeriesInfoForTranslatorAsync(
                 translator,
-                CancellationToken.None).ConfigureAwait(false);
+                CancellationToken.None)).ConfigureAwait(false);
+        for (var index = 0; index < translators.Count; index++)
+        {
+            var info = information[index];
             if (info is not null)
             {
-                result.TryAdd(translator.Id, info);
+                result.TryAdd(translators[index].Id, info);
             }
         }
 
         return result;
+    }
+
+    private async Task<MediaStream?> LoadEpisodeStreamWithRetryAsync(
+        int season,
+        int episode,
+        Translator translator,
+        bool ignoreErrors,
+        CancellationToken cancellationToken)
+    {
+        var attempt = 0;
+        while (true)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            try
+            {
+                return await FetchStreamAsync(
+                    season,
+                    episode,
+                    translator,
+                    "get_stream",
+                    cancellationToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (PremiumRequiredException)
+            {
+                throw;
+            }
+            catch (Exception) when (attempt++ == 0 || ignoreErrors)
+            {
+                await Task.Delay(TimeSpan.FromSeconds(1), cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception)
+            {
+                return null;
+            }
+        }
     }
 
     private async Task<SeriesInfo?> GetSeriesInfoForTranslatorAsync(

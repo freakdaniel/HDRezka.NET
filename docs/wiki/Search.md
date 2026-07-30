@@ -55,8 +55,9 @@ var firstTenPages = await client.SearchAllAsync(
     cancellationToken);
 ```
 
-When `maximumPages` is `null`, pages are loaded sequentially until the website
-returns an empty page:
+When `maximumPages` is `null`, the first page determines the total page count
+Remaining pages are loaded concurrently up to
+`ClientOptions.MaxConcurrentRequests` and returned in page order:
 
 ```csharp
 var allResults = await client.SearchAllAsync(

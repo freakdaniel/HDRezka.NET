@@ -82,8 +82,8 @@ Use the default `ignoreErrors: false` for bounded retry behavior
 
 ## Search returns too many requests
 
-Pass `maximumPages` to `SearchAllAsync`; without a limit, the method continues
-until the website returns an empty page
+Pass `maximumPages` to `SearchAllAsync`; without a limit, the method loads the
+total page count detected from the first response
 
 ## Reporting a bug
 

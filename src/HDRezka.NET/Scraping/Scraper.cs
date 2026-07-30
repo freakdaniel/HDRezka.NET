@@ -39,6 +39,7 @@ internal sealed partial class Scraper : IScraper
             ParseReleaseYear(document),
             format,
             ParseCategory(url),
+            ParseDetails(document, origin),
             ParseRating(document),
             AccountTokenParser.Parse(document),
             translationOptions,
@@ -102,17 +103,21 @@ internal sealed partial class Scraper : IScraper
             .ToList();
     }
 
-    public async Task<IReadOnlyList<SearchResult>> ParseSearchPageAsync(
+    public async Task<PageResult<SearchResult>> ParseSearchPageAsync(
         string html,
         Uri origin,
+        int page,
         CancellationToken cancellationToken)
     {
         var document = await Parsing.ParseDocumentAsync(html, cancellationToken).ConfigureAwait(false);
         Parsing.ThrowForChallengePage(document);
-        return document
-            .QuerySelectorAll(".b-content__inline_item")
-            .Select(item => ParseFullSearchResult(item, origin))
-            .ToList();
+        return new PageResult<SearchResult>(
+            document
+                .QuerySelectorAll(".b-content__inline_item")
+                .Select(item => ParseFullSearchResult(item, origin))
+                .ToList(),
+            page,
+            CatalogParser.ParseTotalPages(document));
     }
 
     private static int ParseId(IDocument document, Uri url)
@@ -182,6 +187,7 @@ internal sealed partial class Scraper : IScraper
             "series" => MediaCategory.Series,
             "cartoons" => MediaCategory.Cartoon,
             "animation" => MediaCategory.Anime,
+            "show" => MediaCategory.Show,
             _ => MediaCategory.Unknown
         };
 
@@ -208,6 +214,205 @@ internal sealed partial class Scraper : IScraper
             : (int?)null;
         return new Rating(value, votes);
     }
+
+    private static MediaDetails ParseDetails(IDocument document, Uri origin)
+    {
+        var durationMinutes = Parsing.TryParseOptionalInt(
+            NonDigitRegex().Replace(GetInfoValue(document, "Время") ?? "", ""));
+        return new MediaDetails(
+            EmptyToNull(GetInfoValue(document, "Слоган")),
+            TryParseDate(GetInfoValue(document, "Дата выхода")),
+            ParseNamedLinks(FindInfoRow(document, "Страна"), origin),
+            document
+                .QuerySelectorAll(".b-post__info [itemprop=\"genre\"]")
+                .Select(element => ParseNamedLink(element.ParentElement, origin))
+                .Where(link => link is not null)
+                .Cast<NamedLink>()
+                .ToList(),
+            ParsePersons(document, "director", origin),
+            ParsePersons(document, "actor", origin),
+            EmptyToNull(GetInfoValue(document, "В качестве")),
+            EmptyToNull(GetInfoValue(document, "Возраст")),
+            durationMinutes.HasValue
+                ? TimeSpan.FromMinutes(durationMinutes.Value)
+                : null,
+            ParseNamedLinks(FindInfoRow(document, "Из серии"), origin),
+            ParseNamedLinks(FindInfoRow(document, "Входит в списки"), origin),
+            ParseExternalRatings(document, origin),
+            CatalogParser.ParseItems(document, origin),
+            ParseSchedule(document));
+    }
+
+    private static IReadOnlyList<PersonInfo> ParsePersons(
+        IDocument document,
+        string property,
+        Uri origin) =>
+        document
+            .QuerySelectorAll($".person-name-item[itemprop=\"{property}\"]")
+            .Select(element =>
+            {
+                var link = element.QuerySelector("a");
+                var name = element.QuerySelector("[itemprop=\"name\"]")?.TextContent.Trim();
+                if (!int.TryParse(
+                        element.GetAttribute("data-id"),
+                        NumberStyles.Integer,
+                        CultureInfo.InvariantCulture,
+                        out var id) ||
+                    string.IsNullOrWhiteSpace(name) ||
+                    link is null)
+                {
+                    return null;
+                }
+
+                var url = TryParseUri(origin, link.GetAttribute("href"));
+                if (url is null)
+                {
+                    return null;
+                }
+
+                return new PersonInfo(
+                    id,
+                    name,
+                    element.GetAttribute("data-job")?.Trim() ?? property,
+                    url,
+                    TryParseUri(origin, element.GetAttribute("data-photo")));
+            })
+            .Where(person => person is not null)
+            .Cast<PersonInfo>()
+            .ToList();
+
+    private static IReadOnlyList<ExternalRating> ParseExternalRatings(
+        IDocument document,
+        Uri origin) =>
+        document
+            .QuerySelectorAll(".b-post__info_rates")
+            .Select(element =>
+            {
+                var source = element.QuerySelector("a")?.TextContent.Trim();
+                if (string.IsNullOrWhiteSpace(source))
+                {
+                    return null;
+                }
+
+                var value = double.TryParse(
+                    element.QuerySelector(".bold")?.TextContent.Trim(),
+                    NumberStyles.Float,
+                    CultureInfo.InvariantCulture,
+                    out var parsedValue)
+                        ? parsedValue
+                        : (double?)null;
+                var voteDigits = NonDigitRegex().Replace(
+                    element.QuerySelector("i")?.TextContent ?? "",
+                    "");
+                var votes = int.TryParse(
+                    voteDigits,
+                    NumberStyles.Integer,
+                    CultureInfo.InvariantCulture,
+                    out var parsedVotes)
+                        ? parsedVotes
+                        : (int?)null;
+                return new ExternalRating(
+                    source,
+                    value,
+                    votes,
+                    TryParseUri(
+                        origin,
+                        element.QuerySelector("a")?.GetAttribute("href")));
+            })
+            .Where(rating => rating is not null)
+            .Cast<ExternalRating>()
+            .ToList();
+
+    private static IReadOnlyList<EpisodeScheduleEntry> ParseSchedule(
+        IDocument document) =>
+        document
+            .QuerySelectorAll(".b-post__schedule_table tr")
+            .Select(row =>
+            {
+                var identifier = row.QuerySelector(".td-1");
+                var match = ScheduleEpisodeRegex().Match(
+                    identifier?.TextContent ?? "");
+                if (!long.TryParse(
+                        identifier?.GetAttribute("data-id"),
+                        NumberStyles.Integer,
+                        CultureInfo.InvariantCulture,
+                        out var id) ||
+                    !match.Success)
+                {
+                    return null;
+                }
+
+                var action = row.QuerySelector(".watch-episode-action");
+                return new EpisodeScheduleEntry(
+                    id,
+                    int.Parse(
+                        match.Groups["season"].Value,
+                        CultureInfo.InvariantCulture),
+                    int.Parse(
+                        match.Groups["episode"].Value,
+                        CultureInfo.InvariantCulture),
+                    EmptyToNull(row.QuerySelector(".td-2 b")?.TextContent.Trim()),
+                    EmptyToNull(row.QuerySelector(".td-2 span")?.TextContent.Trim()),
+                    TryParseDate(row.QuerySelector(".td-4")?.TextContent),
+                    row.QuerySelector(".exists-episode") is not null,
+                    action?.ClassList.Contains("watched") == true);
+            })
+            .Where(entry => entry is not null)
+            .Cast<EpisodeScheduleEntry>()
+            .ToList();
+
+    private static IReadOnlyList<NamedLink> ParseNamedLinks(
+        IElement? container,
+        Uri origin) =>
+        container?
+            .QuerySelectorAll("a")
+            .Select(element => ParseNamedLink(element, origin))
+            .Where(link => link is not null)
+            .Cast<NamedLink>()
+            .ToList()
+        ?? [];
+
+    private static NamedLink? ParseNamedLink(IElement? element, Uri origin)
+    {
+        var name = element?.TextContent.Trim();
+        var url = TryParseUri(origin, element?.GetAttribute("href"));
+        return string.IsNullOrWhiteSpace(name) || url is null
+            ? null
+            : new NamedLink(name, url);
+    }
+
+    private static IElement? FindInfoRow(IDocument document, string heading) =>
+        document
+            .QuerySelectorAll(".b-post__info tr")
+            .FirstOrDefault(
+                row => row.QuerySelector("h2")?.TextContent.Trim()
+                    .Equals(heading, StringComparison.OrdinalIgnoreCase) == true);
+
+    private static string? GetInfoValue(IDocument document, string heading)
+    {
+        var cells = FindInfoRow(document, heading)?.QuerySelectorAll("td");
+        return cells is null || cells.Length == 0
+            ? null
+            : cells[^1].TextContent.Trim();
+    }
+
+    private static DateOnly? TryParseDate(string? value)
+    {
+        var normalized = value?
+            .Replace("года", "", StringComparison.OrdinalIgnoreCase)
+            .Replace('\u00A0', ' ')
+            .Trim();
+        return DateOnly.TryParse(
+            normalized,
+            CultureInfo.GetCultureInfo("ru-RU"),
+            DateTimeStyles.AllowWhiteSpaces,
+            out var result)
+                ? result
+                : null;
+    }
+
+    private static string? EmptyToNull(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     private static IReadOnlyList<Translator> ParseTranslators(
         IDocument document)
@@ -377,6 +582,7 @@ internal sealed partial class Scraper : IScraper
         if (set.Contains("series")) return MediaCategory.Series;
         if (set.Contains("cartoons")) return MediaCategory.Cartoon;
         if (set.Contains("animation")) return MediaCategory.Anime;
+        if (set.Contains("show")) return MediaCategory.Show;
         return MediaCategory.Unknown;
     }
 
@@ -395,6 +601,9 @@ internal sealed partial class Scraper : IScraper
 
     [GeneratedRegex(@"\D")]
     private static partial Regex NonDigitRegex();
+
+    [GeneratedRegex(@"(?<season>\d+)\s+сезон\s+(?<episode>\d+)\s+серия", RegexOptions.IgnoreCase)]
+    private static partial Regex ScheduleEpisodeRegex();
 
     [GeneratedRegex(@"initCDN(?:Series|Movies)Events\s*\([^,]+,\s*(\d+)", RegexOptions.IgnoreCase)]
     private static partial Regex TranslatorIdRegex();

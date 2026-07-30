@@ -436,13 +436,13 @@ public sealed class Client : IDisposable
         CreateSearch().SearchPageAsync(query, page, cancellationToken);
 
     /// <summary>
-    /// Loads full search pages until an empty page or the configured limit is reached
+    /// Loads detected full-search pages concurrently up to the configured limit
     /// </summary>
     /// <param name="query">
     /// Text entered into the website search
     /// </param>
     /// <param name="maximumPages">
-    /// Maximum number of pages to load, or <see langword="null"/> to continue until an empty page
+    /// Maximum number of pages to load, or <see langword="null"/> to use the total detected from page navigation
     /// </param>
     /// <param name="cancellationToken">
     /// Token used to cancel any request or response parsing

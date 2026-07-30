@@ -36,6 +36,8 @@ the catalog, load curated collections, and work with authenticated account data
   exceptions
 - [Troubleshooting](Troubleshooting) — diagnose the most common integration
   failures
+- [Site requests and parsing](Site-Requests) — understand direct endpoints,
+  HTML parsing, remaining website sources, and concurrency
 
 ## Requirements
 

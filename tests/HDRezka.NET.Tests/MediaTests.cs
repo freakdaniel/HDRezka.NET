@@ -484,6 +484,59 @@ public sealed class MediaTests
     }
 
     [Fact]
+    public async Task GetSeasonStreamsAsync_UsesLimitedParallelRequests()
+    {
+        var active = 0;
+        var maximumActive = 0;
+        using var client = CreateClient(async (request, cancellationToken) =>
+        {
+            if (request.Method == HttpMethod.Get)
+            {
+                return StubHttpHandler.Html(SeriesHtml);
+            }
+
+            var form = await request.Content!.ReadAsStringAsync(cancellationToken);
+            if (form.Contains("action=get_episodes", StringComparison.Ordinal))
+            {
+                return StubHttpHandler.Json(JsonSerializer.Serialize(new
+                {
+                    success = true,
+                    seasons =
+                        "<li class=\"b-simple_season__item\" data-tab_id=\"1\">Season 1</li>",
+                    episodes = string.Concat(
+                        Enumerable.Range(1, 4).Select(
+                            episode =>
+                                "<li class=\"b-simple_episode__item\" data-season_id=\"1\" " +
+                                $"data-episode_id=\"{episode}\">Episode {episode}</li>"))
+                }));
+            }
+
+            var current = Interlocked.Increment(ref active);
+            maximumActive = Math.Max(maximumActive, current);
+            await Task.Delay(30, cancellationToken);
+            Interlocked.Decrement(ref active);
+            var episodeNumber = Enumerable.Range(1, 4)
+                .Single(episode => form.Contains($"episode={episode}", StringComparison.Ordinal));
+            return StubHttpHandler.Json(JsonSerializer.Serialize(new
+            {
+                success = true,
+                url = $"[720p]https://cdn.test/s01e{episodeNumber:00}.mp4"
+            }));
+        });
+        var options = new ClientOptions { MaxConcurrentRequests = 2 };
+        using var media = await Media.CreateAsync(
+            "https://hdrezka.test/series/321-show.html",
+            options,
+            client);
+
+        var streams = await media.GetSeasonStreamsAsync(1);
+
+        Assert.Equal(4, streams.Count);
+        Assert.Equal(2, maximumActive);
+        Assert.All(streams.Values, Assert.NotNull);
+    }
+
+    [Fact]
     public async Task CreateAsync_UsesOpenGraphWhenPageSelectorsAreMissing()
     {
         const string html = """
@@ -511,6 +564,113 @@ public sealed class MediaTests
         Assert.Equal("Fallback description", media.Description);
         Assert.Equal(2025, media.ReleaseYear);
         Assert.Equal(new Uri("https://images.test/fallback.jpg"), media.Thumbnail);
+    }
+
+    [Fact]
+    public async Task CreateAsync_ParsesExtendedMetadataWithoutAdditionalRequests()
+    {
+        var requests = 0;
+        const string html = """
+            <html>
+            <head>
+              <meta property="og:type" content="video.tv_series">
+              <meta property="og:image" content="/show.jpg">
+            </head>
+            <body>
+              <input id="post_id" value="700">
+              <h1 class="b-post__title">Detailed show</h1>
+              <ul id="translators-list"><li data-translator_id="56">Dub</li></ul>
+              <table class="b-post__info">
+                <tr><td class="l"><h2>Рейтинги</h2></td><td>
+                  <span class="b-post__info_rates imdb">
+                    <a href="/external/imdb">IMDb</a>
+                    <span class="bold">8.1</span><i>(12 345)</i>
+                  </span>
+                </td></tr>
+                <tr><td class="l"><h2>Входит в списки</h2></td>
+                  <td><a href="/best/series/">Best series</a></td></tr>
+                <tr><td class="l"><h2>Слоган</h2></td><td>Test tagline</td></tr>
+                <tr><td class="l"><h2>Дата выхода</h2></td>
+                  <td>13 мая <a href="/year/2026/">2026 года</a></td></tr>
+                <tr><td class="l"><h2>Страна</h2></td>
+                  <td><a href="/country/USA/">США</a></td></tr>
+                <tr><td class="l"><h2>Режиссер</h2></td><td>
+                  <span class="person-name-item" itemprop="director"
+                    data-id="10" data-job="Режиссер" data-photo="/people/10.jpg">
+                    <a href="/person/10-director/"><span itemprop="name">Director</span></a>
+                  </span>
+                </td></tr>
+                <tr><td class="l"><h2>Жанр</h2></td><td>
+                  <a href="/series/drama/"><span itemprop="genre">Драмы</span></a>
+                </td></tr>
+                <tr><td class="l"><h2>В качестве</h2></td><td>1080p</td></tr>
+                <tr><td class="l"><h2>Возраст</h2></td><td>16+</td></tr>
+                <tr><td class="l"><h2>Время</h2></td><td>45 мин.</td></tr>
+                <tr><td class="l"><h2>Из серии</h2></td>
+                  <td><a href="/collections/1-test/">Test collection</a></td></tr>
+                <tr><td colspan="2"><h2>В ролях актеры</h2>
+                  <span class="person-name-item" itemprop="actor"
+                    data-id="20" data-job="Актер">
+                    <a href="/person/20-actor/"><span itemprop="name">Actor</span></a>
+                  </span>
+                </td></tr>
+              </table>
+              <table class="b-post__schedule_table">
+                <tr>
+                  <td class="td-1" data-id="500">1 сезон 2 серия</td>
+                  <td class="td-2"><b>Episode title</b><span>Original title</span></td>
+                  <td class="td-3"><i class="watch-episode-action watched"></i></td>
+                  <td class="td-4">26 мая 2026</td>
+                  <td class="td-5"><span class="exists-episode">✓</span></td>
+                </tr>
+              </table>
+              <div class="b-content__inline_item" data-id="701">
+                <div class="b-content__inline_item-cover">
+                  <a href="/films/drama/701-related.html"><img src="/related.jpg"></a>
+                  <span class="cat films"></span>
+                </div>
+                <div class="b-content__inline_item-link">
+                  <a href="/films/drama/701-related.html">Related movie</a>
+                  <div>2025, USA, Drama</div>
+                </div>
+              </div>
+            </body>
+            </html>
+            """;
+        using var client = CreateClient((_, _) =>
+        {
+            requests++;
+            return Task.FromResult(StubHttpHandler.Html(html));
+        });
+
+        using var media = await Media.CreateAsync(
+            "https://hdrezka.test/series/700-detailed.html",
+            httpClient: client);
+
+        Assert.Equal(1, requests);
+        Assert.Equal("Test tagline", media.Details.Tagline);
+        Assert.Equal(new DateOnly(2026, 5, 13), media.Details.ReleaseDate);
+        Assert.Equal("США", Assert.Single(media.Details.Countries).Name);
+        Assert.Equal("Драмы", Assert.Single(media.Details.Genres).Name);
+        Assert.Equal("Director", Assert.Single(media.Details.Directors).Name);
+        Assert.Equal("Actor", Assert.Single(media.Details.Cast).Name);
+        Assert.Equal("1080p", media.Details.Quality);
+        Assert.Equal("16+", media.Details.AgeRating);
+        Assert.Equal(TimeSpan.FromMinutes(45), media.Details.Duration);
+        Assert.Equal("Test collection", Assert.Single(media.Details.Collections).Name);
+        Assert.Equal("Best series", Assert.Single(media.Details.Rankings).Name);
+        var externalRating = Assert.Single(media.Details.ExternalRatings);
+        Assert.Equal("IMDb", externalRating.Source);
+        Assert.Equal(8.1, externalRating.Value);
+        Assert.Equal(12345, externalRating.Votes);
+        Assert.Equal("Related movie", Assert.Single(media.Details.Recommendations).Title);
+        var schedule = Assert.Single(media.Details.Schedule);
+        Assert.Equal(500, schedule.Id);
+        Assert.Equal(1, schedule.Season);
+        Assert.Equal(2, schedule.Episode);
+        Assert.Equal(new DateOnly(2026, 5, 26), schedule.ReleaseDate);
+        Assert.True(schedule.IsAvailable);
+        Assert.True(schedule.IsWatched);
     }
 
     private static HttpClient CreateClient(

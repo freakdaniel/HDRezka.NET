@@ -21,8 +21,9 @@ internal interface IScraper
         Uri origin,
         CancellationToken cancellationToken);
 
-    Task<IReadOnlyList<SearchResult>> ParseSearchPageAsync(
+    Task<PageResult<SearchResult>> ParseSearchPageAsync(
         string html,
         Uri origin,
+        int page,
         CancellationToken cancellationToken);
 }

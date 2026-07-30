@@ -49,7 +49,12 @@ public enum MediaCategory
     /// <summary>
     /// An anime film or series
     /// </summary>
-    Anime
+    Anime,
+
+    /// <summary>
+    /// A television program or entertainment show
+    /// </summary>
+    Show
 }
 
 /// <summary>

@@ -13,6 +13,7 @@
 - [Premium access](Premium-Access)
 - [Error handling](Error-Handling)
 - [Troubleshooting](Troubleshooting)
+- [Site requests and parsing](Site-Requests)
 - [Architecture and development](Architecture-and-Development)
 
 ---

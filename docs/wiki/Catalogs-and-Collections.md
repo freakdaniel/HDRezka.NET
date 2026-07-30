@@ -18,6 +18,14 @@ var upcoming = await client.Catalog.GetUpcomingAsync();
 var watching = await client.Catalog.GetWatchingAsync();
 ```
 
+Dedicated website directories are also available:
+
+```csharp
+var newReleases = await client.Catalog.GetNewReleasesAsync();
+var announcements = await client.Catalog.GetAnnouncementsAsync();
+var shows = await client.Catalog.GetShowsAsync();
+```
+
 Use `GetPageAsync` when the section is selected dynamically:
 
 ```csharp
@@ -35,7 +43,8 @@ foreach (var item in page.Items)
 ```
 
 `MediaCategory.Unknown` includes every category. The website category filter
-supports films, series, cartoons, and anime. An unsupported category or a page
+supports films, series, cartoons, and anime. Shows are available through
+`GetShowsAsync`. An unsupported category or a page
 number below one causes `ArgumentOutOfRangeException`.
 
 ## Collection directory

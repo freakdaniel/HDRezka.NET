@@ -12,6 +12,7 @@ responsibilities are separated by directory:
 | `Account` | Profile metadata, continue-watching history, and bookmarks |
 | `Catalog` | Home-page catalog sections and shared media card models |
 | `Collections` | Curated collection directory and collection contents |
+| `Comments` | Paginated comment AJAX client and comment models |
 | `Media` | Media facade, metadata, streams, subtitles, translators, seasons, and episodes |
 | `Search` | Fast and full catalog search |
 | `Exceptions` | Public library exception hierarchy |

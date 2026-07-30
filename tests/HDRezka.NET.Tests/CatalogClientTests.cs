@@ -50,6 +50,46 @@ public sealed class CatalogClientTests
         Assert.Equal(new Uri("https://cdn.test/cover.jpg"), item.ImageUrl);
     }
 
+    [Theory]
+    [InlineData("new", "/new/page/2/", "last", MediaCategory.Series)]
+    [InlineData("announce", "/announce/page/2/", null, MediaCategory.Series)]
+    [InlineData("show", "/show/page/2/", null, MediaCategory.Show)]
+    public async Task DedicatedDirectories_UseExpectedRoutes(
+        string directory,
+        string expectedPath,
+        string? expectedFilter,
+        MediaCategory expectedCategory)
+    {
+        using var httpClient = new HttpClient(new StubHttpHandler((request, _) =>
+        {
+            Assert.Equal(expectedPath, request.RequestUri!.AbsolutePath);
+            if (expectedFilter is not null)
+            {
+                Assert.Contains($"filter={expectedFilter}", request.RequestUri.Query);
+            }
+
+            var html = expectedCategory == MediaCategory.Show
+                ? CatalogHtml
+                    .Replace("/series/", "/show/", StringComparison.Ordinal)
+                    .Replace("cat series", "cat show", StringComparison.Ordinal)
+                : CatalogHtml;
+            return Task.FromResult(StubHttpHandler.Html(html));
+        }));
+        using var client = new Client("https://hdrezka.test", httpClient: httpClient);
+
+        var result = directory switch
+        {
+            "new" => await client.Catalog.GetNewReleasesAsync(
+                MediaCategory.Series,
+                page: 2),
+            "announce" => await client.Catalog.GetAnnouncementsAsync(page: 2),
+            "show" => await client.Catalog.GetShowsAsync(page: 2),
+            _ => throw new InvalidOperationException()
+        };
+
+        Assert.Equal(expectedCategory, Assert.Single(result.Items).Category);
+    }
+
     private const string CatalogHtml = """
         <!doctype html>
         <html>

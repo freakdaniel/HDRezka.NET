@@ -94,6 +94,7 @@ internal static class CatalogParser
         if (set.Contains("series")) return MediaCategory.Series;
         if (set.Contains("cartoons")) return MediaCategory.Cartoon;
         if (set.Contains("animation")) return MediaCategory.Anime;
+        if (set.Contains("show")) return MediaCategory.Show;
 
         return url.AbsolutePath.TrimStart('/').Split('/', 2)[0] switch
         {
@@ -101,6 +102,7 @@ internal static class CatalogParser
             "series" => MediaCategory.Series,
             "cartoons" => MediaCategory.Cartoon,
             "animation" => MediaCategory.Anime,
+            "show" => MediaCategory.Show,
             _ => MediaCategory.Unknown
         };
     }

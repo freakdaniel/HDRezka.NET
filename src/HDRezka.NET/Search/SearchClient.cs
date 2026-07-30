@@ -187,33 +187,18 @@ public sealed class SearchClient : IDisposable
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(query);
-        if (page < 1)
-        {
-            throw new ArgumentOutOfRangeException(nameof(page));
-        }
-
-        var html = await _transport.GetStringAsync(
-            new Uri(Origin, "/search/"),
-            new Dictionary<string, string?>
-            {
-                ["do"] = "search",
-                ["subaction"] = "search",
-                ["q"] = query,
-                ["page"] = page.ToString(CultureInfo.InvariantCulture)
-            },
-            cancellationToken).ConfigureAwait(false);
-        return await _scraper.ParseSearchPageAsync(html, Origin, cancellationToken)
-            .ConfigureAwait(false);
+        return (await LoadSearchPageAsync(query, page, cancellationToken).ConfigureAwait(false))
+            .Items;
     }
 
     /// <summary>
-    /// Loads full search pages until an empty page or the configured limit is reached
+    /// Loads detected full-search pages concurrently up to the configured limit
     /// </summary>
     /// <param name="query">
     /// Text entered into the website search
     /// </param>
     /// <param name="maximumPages">
-    /// Maximum number of pages to load, or <see langword="null"/> to continue until an empty page
+    /// Maximum number of pages to load, or <see langword="null"/> to use the total detected from page navigation
     /// </param>
     /// <param name="cancellationToken">
     /// Token used to cancel any request or response parsing
@@ -258,19 +243,50 @@ public sealed class SearchClient : IDisposable
             throw new ArgumentOutOfRangeException(nameof(maximumPages));
         }
 
-        var results = new List<SearchResult>();
-        for (var page = 1; maximumPages is null || page <= maximumPages; page++)
+        ArgumentException.ThrowIfNullOrWhiteSpace(query);
+        var first = await LoadSearchPageAsync(query, 1, cancellationToken).ConfigureAwait(false);
+        if (first.Items.Count == 0)
         {
-            var current = await SearchPageAsync(query, page, cancellationToken).ConfigureAwait(false);
-            if (current.Count == 0)
-            {
-                break;
-            }
+            return [];
+        }
 
-            results.AddRange(current);
+        var lastPage = Math.Min(maximumPages ?? first.TotalPages, first.TotalPages);
+        var remainingPages = Enumerable.Range(2, Math.Max(0, lastPage - 1));
+        var remaining = await AsyncUtilities.SelectAsync(
+            remainingPages,
+            _transport.Options.MaxConcurrentRequests,
+            (page, token) => LoadSearchPageAsync(query, page, token),
+            cancellationToken).ConfigureAwait(false);
+        var results = new List<SearchResult>(first.Items);
+        foreach (var page in remaining)
+        {
+            results.AddRange(page.Items);
         }
 
         return results;
+    }
+
+    private async Task<PageResult<SearchResult>> LoadSearchPageAsync(
+        string query,
+        int page,
+        CancellationToken cancellationToken)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(page, 1);
+        var html = await _transport.GetStringAsync(
+            new Uri(Origin, "/search/"),
+            new Dictionary<string, string?>
+            {
+                ["do"] = "search",
+                ["subaction"] = "search",
+                ["q"] = query,
+                ["page"] = page.ToString(CultureInfo.InvariantCulture)
+            },
+            cancellationToken).ConfigureAwait(false);
+        return await _scraper.ParseSearchPageAsync(
+            html,
+            Origin,
+            page,
+            cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>

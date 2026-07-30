@@ -51,10 +51,39 @@ first localized title, while `OriginalName` is the last original title or
 - `Series`
 - `Cartoon`
 - `Anime`
+- `Show`
 - `Unknown`
 
 Format and category answer different questions; for example, an anime series
 has `MediaFormat.Series` and `MediaCategory.Anime`
+
+## Extended details
+
+`Details` contains metadata that is already present in the downloaded media
+page and therefore requires no additional request:
+
+```csharp
+Console.WriteLine(media.Details.Tagline);
+Console.WriteLine(media.Details.ReleaseDate);
+Console.WriteLine(media.Details.Quality);
+Console.WriteLine(media.Details.AgeRating);
+Console.WriteLine(media.Details.Duration);
+
+foreach (var country in media.Details.Countries)
+{
+    Console.WriteLine(country.Name);
+}
+
+foreach (var person in media.Details.Cast)
+{
+    Console.WriteLine($"{person.Name}: {person.Url}");
+}
+```
+
+The remaining collections expose genres, directors, linked collections,
+rankings, external ratings, recommendations, and series schedule entries.
+Nullable values indicate that the compatible website omitted the value or used
+an unrecognized format
 
 ## Translations
 
@@ -111,3 +140,16 @@ foreach (var part in media.OtherParts)
 `media.AccountTier` and `media.IsPremiumAccount` describe the session used
 when the page was loaded; see [Premium access](Premium-Access) before using
 these values to make authorization decisions
+
+## Comments
+
+Comments are loaded separately through the website AJAX endpoint:
+
+```csharp
+var page = await media.Comments.GetPageAsync(page: 1);
+```
+
+`CommentPage` contains nested comments in website order, current and total page
+numbers, and the latest update identifier. Each comment exposes its parent
+identifier, nesting depth, author, avatar, date label, text, like count, and
+permalink

@@ -5,8 +5,8 @@
 <p align="center">
     <i>
         An asynchronous .NET 10 library for working with HDRezka 
-        that can use sessions, load account and catalog data, enumerate translations and episodes,
-        resolve video streams and subtitles
+        that can use sessions, load account, catalog, comment, and media data,
+        enumerate translations and episodes, resolve video streams and subtitles
     </i>
 </p>
 
@@ -59,6 +59,12 @@ Console.WriteLine(media.Rating.Value);
 Console.WriteLine(media.Rating.Votes);
 Console.WriteLine(media.Format);
 Console.WriteLine(media.Category);
+Console.WriteLine(media.Details.Duration);
+
+foreach (var genre in media.Details.Genres)
+{
+    Console.WriteLine(genre.Name);
+}
 
 foreach (var translator in media.TranslationOptions)
 {
@@ -78,7 +84,25 @@ using var media = await Media.CreateAsync(
     "https://your-mirror.example/films/drama/123-title.html");
 ```
 
+`Details` also exposes the full release date, countries, genres, directors,
+cast, quality, age rating, tagline, external ratings, collections, rankings,
+recommendations, and series schedule when present
+
 All network methods accept a `CancellationToken`
+
+## Comments
+
+Comments use the website AJAX endpoint, so the complete media page is not
+downloaded again:
+
+```csharp
+var comments = await media.Comments.GetPageAsync(page: 1);
+
+foreach (var comment in comments.Items)
+{
+    Console.WriteLine($"{comment.Author}: {comment.Text}");
+}
+```
 
 ## Streams
 
@@ -168,9 +192,10 @@ var streams = await media.GetSeasonStreamsAsync(
     cancellationToken: cancellationToken);
 ```
 
-Each failed episode is retried once, after which the result for
-that episode is `null` on another failure Set `ignoreErrors: true` to keep retrying until success
-or cancellation
+Episodes are loaded concurrently using `ClientOptions.MaxConcurrentRequests`.
+Each failed episode is retried once, after which its result is `null` on
+another failure. Set `ignoreErrors: true` to keep retrying until success or
+cancellation
 
 ## Seasons and episodes
 
@@ -240,8 +265,8 @@ var page = await session.SearchPageAsync("Film name", page: 2);
 var all = await session.SearchAllAsync("Film name", maximumPages: 10);
 ```
 
-`maximumPages` is optional and, when omitted, pages are loaded until the website
-returns an empty page
+`maximumPages` is optional. The first page determines the available page count,
+after which remaining pages are loaded concurrently and returned in page order
 
 A standalone search client is also available:
 
@@ -284,6 +309,9 @@ var popularSeries = await session.Catalog.GetPopularAsync(
     page: 2);
 var upcoming = await session.Catalog.GetUpcomingAsync();
 var watchingNow = await session.Catalog.GetWatchingAsync();
+var newReleases = await session.Catalog.GetNewReleasesAsync();
+var announcements = await session.Catalog.GetAnnouncementsAsync();
+var shows = await session.Catalog.GetShowsAsync();
 ```
 
 Every result contains the current page, detected total page count, and media
@@ -315,6 +343,7 @@ Credential-based login reproduces the website flow: it sends
 var options = new ClientOptions();
 options.Headers["X-Custom-Header"] = "value";
 options.Proxy = new WebProxy("http://127.0.0.1:8080");
+options.MaxConcurrentRequests = 4;
 
 using var session = new Client(
     "https://your-mirror.example",
@@ -352,6 +381,17 @@ When supplying your own `HttpClient`, configure its handler if you need a
 proxy, while compressed responses are handled by the library and the injected
 client is never disposed
 
+## HTTP and parsing
+
+The library does not run a browser and does not read a browser DOM. Every
+operation uses `HttpClient`:
+
+- JSON or compact HTML endpoints are used directly for login, player data,
+  seasons, fast search, and comments
+- regular pages are downloaded as HTML and parsed in memory with AngleSharp
+- bulk page, translator, bookmark, and episode requests use limited
+  asynchronous concurrency without creating dedicated threads
+
 ## Architecture
 
 Production code is compiled into one `HDRezka.NET` assembly, while logical
@@ -362,6 +402,7 @@ projects or NuGet dependencies:
 - `Account`: profile, continue-watching history, and bookmark models
 - `Catalog`: home-page catalog sections and shared media cards
 - `Collections`: curated collection directory and content
+- `Comments`: paginated AJAX comments
 - `Media`: media facade, streams, subtitles, translators, seasons, and episodes
 - `Search`: search client and result models
 - `Exceptions`: public library exceptions
