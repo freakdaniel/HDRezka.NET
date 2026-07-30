@@ -3,9 +3,11 @@
 </p>
 
 <p align="center">
-    An asynchronous .NET 10 library for working with HDRezka 
-    that can use sessions, load media metadata, enumerate translations and episodes, resolve video
-    streams and subtitles
+    <i>
+        An asynchronous .NET 10 library for working with HDRezka 
+        that can use sessions, load media metadata, enumerate translations and episodes, resolve video
+        streams and subtitles
+    </i>
 </p>
 
 <p align="center">
