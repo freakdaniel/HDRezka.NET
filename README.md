@@ -8,6 +8,10 @@
     streams and subtitles
 </p>
 
+<p align="center">
+    <img alt="NuGet Version" src="https://img.shields.io/nuget/v/HDRezka.NET?style=flat&link=https%3A%2F%2Fwww.nuget.org%2Fpackages%2FHDRezka.NET">
+</p>
+
 > [!NOTE]
 > The website has multiple mirrors and can change its markup or API without
 > notice, so pass the mirror URL you are allowed to access; this package does not
