@@ -1,14 +1,14 @@
-# HDRezka.NET
+<p align="center">
+    <img src="./assets/logo.png" width="256" height="256"/>
+</p>
 
-An asynchronous .NET 10 library for working with HDRezka-compatible websites
-that can load media metadata, enumerate translations and episodes, resolve video
-streams and subtitles, search the catalog, and share authentication cookies
-through a session
+<p align="center">
+    An asynchronous .NET 10 library for working with HDRezka 
+    that can use sessions, load media metadata, enumerate translations and episodes, resolve video
+    streams and subtitles
+</p>
 
-For task-oriented guides and troubleshooting, see the
-[project wiki](https://github.com/freakdaniel/HDRezka.NET/wiki), published
-automatically from [`docs/wiki`](docs/wiki) on `main`
-
+> [!NOTE]
 > The website has multiple mirrors and can change its markup or API without
 > notice, so pass the mirror URL you are allowed to access; this package does not
 > contain a hard-coded domain
@@ -24,6 +24,12 @@ dotnet add package HDRezka.NET
 ```
 
 The package uses the `HdRezka` namespace
+
+## Docs
+
+For task-oriented guides and troubleshooting, see the
+[project wiki](https://github.com/freakdaniel/HDRezka.NET/wiki), published
+automatically from [`docs/wiki`](docs/wiki) on `main`
 
 ## Load a movie or series
 
@@ -341,5 +347,3 @@ dotnet test tests/HDRezka.NET.IntegrationTests \
   --configuration Release \
   --filter "Category=Live"
 ```
-
-The package targets only `net10.0`
