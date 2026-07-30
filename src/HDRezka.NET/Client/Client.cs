@@ -4,7 +4,7 @@ using HdRezka.Scraping;
 namespace HdRezka;
 
 /// <summary>
-/// Provides one entry point for authentication, media loading, and search while sharing cookies and HTTP settings
+/// Provides one entry point for account data, catalogs, collections, authentication, media, and search while sharing cookies and HTTP settings
 /// </summary>
 public sealed class Client : IDisposable
 {
@@ -86,6 +86,30 @@ public sealed class Client : IDisposable
     /// Settings that can be changed for subsequent requests without changing the object passed to the constructor
     /// </value>
     public ClientOptions Options { get; }
+
+    /// <summary>
+    /// Gets account metadata, continue-watching history, and bookmark operations
+    /// </summary>
+    /// <exception cref="InvalidOperationException">
+    /// The client was created without an origin
+    /// </exception>
+    public AccountClient Account => new(_transport, RequireOrigin("account data"));
+
+    /// <summary>
+    /// Gets home-page catalog section operations
+    /// </summary>
+    /// <exception cref="InvalidOperationException">
+    /// The client was created without an origin
+    /// </exception>
+    public CatalogClient Catalog => new(_transport, RequireOrigin("catalogs"));
+
+    /// <summary>
+    /// Gets curated collection directory and content operations
+    /// </summary>
+    /// <exception cref="InvalidOperationException">
+    /// The client was created without an origin
+    /// </exception>
+    public CollectionClient Collections => new(_transport, RequireOrigin("collections"));
 
     /// <summary>
     /// Signs in with website credentials and keeps the returned cookies for subsequent requests
@@ -475,6 +499,11 @@ public sealed class Client : IDisposable
 
         return new Uri(Origin, value);
     }
+
+    private Uri RequireOrigin(string operation) =>
+        Origin ??
+        throw new InvalidOperationException(
+            $"An origin is required to access {operation}.");
 
     private Uri ResolveUrl(Uri value)
     {

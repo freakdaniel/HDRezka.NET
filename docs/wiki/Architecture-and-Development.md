@@ -9,6 +9,9 @@ responsibilities are separated by directory:
 | Directory | Responsibility |
 | --- | --- |
 | `Client` | Main entry point, configuration, authentication state, and cookie helpers |
+| `Account` | Profile metadata, continue-watching history, and bookmarks |
+| `Catalog` | Home-page catalog sections and shared media card models |
+| `Collections` | Curated collection directory and collection contents |
 | `Media` | Media facade, metadata, streams, subtitles, translators, seasons, and episodes |
 | `Search` | Fast and full catalog search |
 | `Exceptions` | Public library exception hierarchy |

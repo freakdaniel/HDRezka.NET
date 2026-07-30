@@ -32,6 +32,38 @@ public sealed class AuthenticationTests
         Assert.Contains("dle_user_id", login.CookieNames);
         Assert.Contains("dle_password", login.CookieNames);
 
+        var profile = await client.Account.GetProfileAsync();
+        Assert.True(profile.Id > 0);
+        Assert.False(string.IsNullOrWhiteSpace(profile.Username));
+        Assert.NotNull(profile.AvatarUrl);
+        Assert.Equal(login.AccountTier, profile.Tier);
+
+        var continueWatching = await client.Account.GetContinueWatchingAsync();
+        Assert.NotEmpty(continueWatching);
+        Assert.All(continueWatching, item =>
+        {
+            Assert.True(item.Id > 0);
+            Assert.True(item.Url.IsAbsoluteUri);
+            Assert.True(item.ImageUrl.IsAbsoluteUri);
+        });
+
+        var bookmarkFolders = await client.Account.GetBookmarksAsync();
+        Assert.NotEmpty(bookmarkFolders);
+        Assert.All(bookmarkFolders, folder => Assert.True(folder.Url.IsAbsoluteUri));
+
+        var catalogPages = await Task.WhenAll(
+            client.Catalog.GetLatestAsync(),
+            client.Catalog.GetPopularAsync(),
+            client.Catalog.GetUpcomingAsync(),
+            client.Catalog.GetWatchingAsync());
+        Assert.All(catalogPages, page => Assert.NotEmpty(page.Items));
+
+        var collections = await client.Collections.GetPageAsync();
+        Assert.NotEmpty(collections.Items);
+        var collection = await client.Collections.GetAsync(collections.Items[0]);
+        Assert.Equal(collections.Items[0].Id, collection.Id);
+        Assert.NotEmpty(collection.Items);
+
         using var media = await client.GetAsync(mediaPath);
         Assert.True(media.Id > 0);
         Assert.False(string.IsNullOrWhiteSpace(media.Name));

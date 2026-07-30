@@ -5,8 +5,8 @@
 <p align="center">
     <i>
         An asynchronous .NET 10 library for working with HDRezka 
-        that can use sessions, load media metadata, enumerate translations and episodes, resolve video
-        streams and subtitles
+        that can use sessions, load account and catalog data, enumerate translations and episodes,
+        resolve video streams and subtitles
     </i>
 </p>
 
@@ -250,6 +250,61 @@ using var search = new SearchClient("https://your-mirror.example");
 var results = await search.FastSearchAsync("Film name");
 ```
 
+## Account data
+
+Account operations share the authenticated session:
+
+```csharp
+var profile = await session.Account.GetProfileAsync();
+
+Console.WriteLine(profile.Username);
+Console.WriteLine(profile.AvatarUrl);
+Console.WriteLine(profile.Tier);
+Console.WriteLine(profile.ContinueWatchingCount);
+
+var continueWatching = await session.Account.GetContinueWatchingAsync();
+var bookmarkFolders = await session.Account.GetBookmarksAsync();
+```
+
+Continue-watching entries expose the saved date, cover, media category, season,
+episode, translator, watched state, and remaining episode count when available
+
+Bookmarks preserve user-created folders and return their media as `CatalogItem`
+instances
+
+## Catalog sections
+
+The four home-page sections and their category filters are available through
+`Catalog`:
+
+```csharp
+var latest = await session.Catalog.GetLatestAsync();
+var popularSeries = await session.Catalog.GetPopularAsync(
+    MediaCategory.Series,
+    page: 2);
+var upcoming = await session.Catalog.GetUpcomingAsync();
+var watchingNow = await session.Catalog.GetWatchingAsync();
+```
+
+Every result contains the current page, detected total page count, and media
+cards with title, cover, category, details, and episode or release information
+
+## Collections
+
+```csharp
+var directory = await session.Collections.GetPageAsync();
+var firstCollection = directory.Items[0];
+var collection = await session.Collections.GetAsync(firstCollection);
+
+foreach (var item in collection.Items)
+{
+    Console.WriteLine($"{item.Title}: {item.Url}");
+}
+```
+
+Both the collection directory and collection contents support one-based
+pagination
+
 ## Authentication, cookies, headers, and proxy
 
 Credential-based login reproduces the website flow: it sends
@@ -299,11 +354,14 @@ client is never disposed
 
 ## Architecture
 
-Production code is compiled into one `HDRezka.NET` assembly with logical
+Production code is compiled into one `HDRezka.NET` assembly, while logical
 responsibilities remain separated by directories without introducing extra
 projects or NuGet dependencies:
 
 - `Client`: client entry point, options, authentication state, and cookie helpers
+- `Account`: profile, continue-watching history, and bookmark models
+- `Catalog`: home-page catalog sections and shared media cards
+- `Collections`: curated collection directory and content
 - `Media`: media facade, streams, subtitles, translators, seasons, and episodes
 - `Search`: search client and result models
 - `Exceptions`: public library exceptions

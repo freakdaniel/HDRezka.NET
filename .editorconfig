@@ -16,3 +16,12 @@ dotnet_style_namespace_match_folder = false
 
 [src/HDRezka.NET/Exceptions/*.cs]
 dotnet_style_namespace_match_folder = false
+
+[src/HDRezka.NET/Account/*.cs]
+dotnet_style_namespace_match_folder = false
+
+[src/HDRezka.NET/Catalog/*.cs]
+dotnet_style_namespace_match_folder = false
+
+[src/HDRezka.NET/Collections/*.cs]
+dotnet_style_namespace_match_folder = false

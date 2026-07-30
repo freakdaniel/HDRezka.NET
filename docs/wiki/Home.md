@@ -2,8 +2,8 @@
 
 HDRezka.NET is an asynchronous .NET 10 library for HDRezka-compatible
 websites and can load movie and series metadata, select translations, resolve
-video streams and subtitles, enumerate seasons and episodes, search the
-catalog, and keep an authenticated session
+video streams and subtitles, enumerate seasons and episodes, search and browse
+the catalog, load curated collections, and work with authenticated account data
 
 > [!IMPORTANT]
 > Website mirrors can change their markup and endpoints without notice; the
@@ -17,6 +17,8 @@ catalog, and keep an authenticated session
   media page
 - [Authentication](Authentication) — log in, restore cookies, inspect account
   state, and log out
+- [Account data](Account-Data) — load the profile, continue-watching history,
+  and bookmark folders
 - [Media metadata](Media-Metadata) — work with titles, ratings, formats,
   categories, translators, and related parts
 - [Streams and subtitles](Streams-and-Subtitles) — resolve movie and episode
@@ -24,6 +26,8 @@ catalog, and keep an authenticated session
 - [Series and episodes](Series-and-Episodes) — enumerate seasons and load a
   complete season
 - [Search](Search) — use fast suggestions or paginated catalog search
+- [Catalogs and collections](Catalogs-and-Collections) — browse home-page
+  sections and curated collections
 - [Configuration](Configuration) — configure headers, cookies, proxies,
   translator priorities, and a custom `HttpClient`
 - [Premium access](Premium-Access) — understand account tiers and protected

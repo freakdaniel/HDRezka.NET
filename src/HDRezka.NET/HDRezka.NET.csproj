@@ -4,10 +4,10 @@
     <AssemblyName>HDRezka.NET</AssemblyName>
     <RootNamespace>HdRezka</RootNamespace>
     <PackageId>HDRezka.NET</PackageId>
-    <Version>0.0.1</Version>
+    <Version>0.0.2</Version>
     <Authors>freakdaniel</Authors>
     <Description>An asynchronous .NET client for HDRezka</Description>
-    <PackageTags>hdrezka;api;parser;movies;series;anime;streaming</PackageTags>
+    <PackageTags>hdrezka;api;parser;movies;series;anime;streaming;catalog;collections</PackageTags>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <RepositoryUrl>https://github.com/freakdaniel/HDRezka.NET</RepositoryUrl>
