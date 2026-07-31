@@ -11,7 +11,9 @@
 </p>
 
 <p align="center">
-    <img alt="NuGet Version" src="https://img.shields.io/nuget/v/HDRezka.NET?style=flat&link=https%3A%2F%2Fwww.nuget.org%2Fpackages%2FHDRezka.NET">
+    <a href="https://www.nuget.org/packages/HDRezka.NET">
+        <img alt="NuGet Version" src="https://img.shields.io/nuget/v/HDRezka.NET?style=flat&link=https%3A%2F%2Fwww.nuget.org%2Fpackages%2FHDRezka.NET">
+    </a>
 </p>
 
 > [!IMPORTANT]
