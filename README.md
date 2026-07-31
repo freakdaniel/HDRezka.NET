@@ -14,10 +14,14 @@
     <img alt="NuGet Version" src="https://img.shields.io/nuget/v/HDRezka.NET?style=flat&link=https%3A%2F%2Fwww.nuget.org%2Fpackages%2FHDRezka.NET">
 </p>
 
-> [!NOTE]
+> [!IMPORTANT]
 > The website has multiple mirrors and can change its markup or API without
 > notice, so pass the mirror URL you are allowed to access; this package does not
 > contain a hard-coded domain
+
+
+> [!NOTE]
+> The project was originally a fork of https://github.com/SuperZombi/HdRezkaApi intended to create a library for .NET, but it ultimately became completely self-sufficient and superior to the original in every aspect
 
 ## Requirements
 
