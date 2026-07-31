@@ -46,6 +46,40 @@ public sealed class MediaTests
     }
 
     [Fact]
+    public async Task SetBookmarkAsync_UsesLoadedFolderStateAndUpdatesSnapshot()
+    {
+        var postedForms = new List<string>();
+        using var client = CreateClient(async (request, cancellationToken) =>
+        {
+            if (request.Method == HttpMethod.Get)
+            {
+                return StubHttpHandler.Html(MovieHtml);
+            }
+
+            Assert.Equal("/ajax/favorites/", request.RequestUri!.AbsolutePath);
+            postedForms.Add(await request.Content!.ReadAsStringAsync(cancellationToken));
+            return StubHttpHandler.Json("""{"success":true}""");
+        });
+        using var media = await Media.CreateAsync(
+            "https://hdrezka.test/films/123-test.html",
+            httpClient: client);
+
+        Assert.Equal([111], media.BookmarkFolderIds);
+
+        await media.SetBookmarkAsync(111, isBookmarked: true);
+        await media.SetBookmarkAsync(111, isBookmarked: false);
+        await media.SetBookmarkAsync(111, isBookmarked: false);
+        await media.SetBookmarkAsync(222, isBookmarked: true);
+
+        Assert.Equal(2, postedForms.Count);
+        Assert.Contains("post_id=123", postedForms[0]);
+        Assert.Contains("cat_id=111", postedForms[0]);
+        Assert.Contains("action=add_post", postedForms[0]);
+        Assert.Contains("cat_id=222", postedForms[1]);
+        Assert.Equal([222], media.BookmarkFolderIds);
+    }
+
+    [Fact]
     public async Task SortTranslators_AppliesPreferredAndNonPreferredLists()
     {
         using var client = CreateClient((_, _) =>
@@ -488,6 +522,10 @@ public sealed class MediaTests
     {
         var active = 0;
         var maximumActive = 0;
+        var twoRequestsStarted = new TaskCompletionSource<bool>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseRequests = new TaskCompletionSource<bool>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
         using var client = CreateClient(async (request, cancellationToken) =>
         {
             if (request.Method == HttpMethod.Get)
@@ -512,8 +550,27 @@ public sealed class MediaTests
             }
 
             var current = Interlocked.Increment(ref active);
-            maximumActive = Math.Max(maximumActive, current);
-            await Task.Delay(30, cancellationToken);
+            var observedMaximum = Volatile.Read(ref maximumActive);
+            while (current > observedMaximum)
+            {
+                var original = Interlocked.CompareExchange(
+                    ref maximumActive,
+                    current,
+                    observedMaximum);
+                if (original == observedMaximum)
+                {
+                    break;
+                }
+
+                observedMaximum = original;
+            }
+
+            if (current == 2)
+            {
+                twoRequestsStarted.TrySetResult(true);
+            }
+
+            await releaseRequests.Task.WaitAsync(cancellationToken);
             Interlocked.Decrement(ref active);
             var episodeNumber = Enumerable.Range(1, 4)
                 .Single(episode => form.Contains($"episode={episode}", StringComparison.Ordinal));
@@ -529,7 +586,11 @@ public sealed class MediaTests
             options,
             client);
 
-        var streams = await media.GetSeasonStreamsAsync(1);
+        var streamsTask = media.GetSeasonStreamsAsync(1);
+        await twoRequestsStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Equal(2, Volatile.Read(ref active));
+        releaseRequests.TrySetResult(true);
+        var streams = await streamsTask;
 
         Assert.Equal(4, streams.Count);
         Assert.Equal(2, maximumActive);
@@ -697,6 +758,10 @@ public sealed class MediaTests
           <main class="b-content__main">
             <input id="post_id" value="123">
             <input id="ctrl_favs" value="favorite-state">
+            <div id="user-favorites-holder">
+              <input class="user-fav-check" value="111" checked="checked">
+              <input class="user-fav-check" value="222">
+            </div>
             <h1 class="b-post__title">Тестовый фильм / Test Film</h1>
             <div class="b-post__origtitle">Film Original / Original Film</div>
             <div class="b-post__description_text"> Description text. </div>

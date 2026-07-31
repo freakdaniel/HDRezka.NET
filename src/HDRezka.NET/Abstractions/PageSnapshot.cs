@@ -19,5 +19,6 @@ internal sealed record PageSnapshot(
     IReadOnlyDictionary<int, Translator> Translators,
     IReadOnlyDictionary<string, Translator> TranslatorsByName,
     IReadOnlyList<RelatedPart> OtherParts,
+    IReadOnlyList<long> BookmarkFolderIds,
     string Favorites,
     SeriesInfo? InitialSeriesInfo);

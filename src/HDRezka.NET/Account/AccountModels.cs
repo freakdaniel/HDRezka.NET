@@ -101,6 +101,35 @@ public sealed record ContinueWatchingEntry(
     int? RemainingEpisodes);
 
 /// <summary>
+/// Describes playback progress sent to the website for synchronization
+/// </summary>
+/// <param name="MediaId">
+/// Numeric media identifier
+/// </param>
+/// <param name="TranslatorId">
+/// Numeric translator identifier used for playback
+/// </param>
+/// <param name="Season">
+/// Season number, or <see langword="null"/> for a movie
+/// </param>
+/// <param name="Episode">
+/// Episode number, or <see langword="null"/> for a movie
+/// </param>
+/// <param name="Position">
+/// Current playback position, or <see langword="null"/> when only the latest media and episode should be saved
+/// </param>
+/// <param name="Duration">
+/// Complete stream duration, or <see langword="null"/> when only the latest media and episode should be saved
+/// </param>
+public sealed record PlaybackProgress(
+    int MediaId,
+    int TranslatorId,
+    int? Season = null,
+    int? Episode = null,
+    TimeSpan? Position = null,
+    TimeSpan? Duration = null);
+
+/// <summary>
 /// Holds one user-created bookmark folder and its media cards
 /// </summary>
 /// <param name="Id">

@@ -53,6 +53,20 @@ public sealed class LoginFailedException : ApiException
 }
 
 /// <summary>
+/// Indicates that an authenticated account operation was rejected by the website
+/// </summary>
+public sealed class AccountOperationException : ApiException
+{
+    /// <summary>
+    /// Creates an account operation failure with the reason returned by the website
+    /// </summary>
+    /// <param name="message">
+    /// Text explaining why the account operation failed
+    /// </param>
+    public AccountOperationException(string message) : base(message) { }
+}
+
+/// <summary>
 /// Identifies the Premium-protected resource requested by the caller
 /// </summary>
 public enum PremiumFeature

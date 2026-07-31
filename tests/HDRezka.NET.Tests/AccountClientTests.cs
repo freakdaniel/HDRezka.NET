@@ -3,6 +3,125 @@ namespace HdRezka.Tests;
 public sealed class AccountClientTests
 {
     [Fact]
+    public async Task SavePlaybackProgressAsync_SendsWebsitePlaybackFields()
+    {
+        using var httpClient = new HttpClient(new StubHttpHandler(async (request, cancellationToken) =>
+        {
+            Assert.Equal(HttpMethod.Post, request.Method);
+            Assert.Equal("/ajax/send_save/", request.RequestUri!.AbsolutePath);
+            Assert.Contains("t=", request.RequestUri.Query);
+            var form = await ParseFormAsync(request, cancellationToken);
+            Assert.Equal("66689", form["post_id"]);
+            Assert.Equal("56", form["translator_id"]);
+            Assert.Equal("1", form["season"]);
+            Assert.Equal("4", form["episode"]);
+            Assert.Equal("83.25", form["current_time"]);
+            Assert.Equal("3600", form["duration"]);
+            return StubHttpHandler.Json("""{"success":1}""");
+        }));
+        using var client = new Client("https://hdrezka.test", httpClient: httpClient);
+
+        await client.Account.SavePlaybackProgressAsync(
+            new PlaybackProgress(
+                66689,
+                56,
+                Season: 1,
+                Episode: 4,
+                Position: TimeSpan.FromSeconds(83.25),
+                Duration: TimeSpan.FromHours(1)));
+    }
+
+    [Fact]
+    public async Task SetContinueWatchingWatchedAsync_TogglesOnlyWhenStateChanges()
+    {
+        var requests = 0;
+        using var httpClient = new HttpClient(new StubHttpHandler(async (request, cancellationToken) =>
+        {
+            requests++;
+            Assert.Equal("/engine/ajax/cdn_saves_view.php", request.RequestUri!.AbsolutePath);
+            var form = await ParseFormAsync(request, cancellationToken);
+            Assert.Equal("101", form["id"]);
+            return StubHttpHandler.Json("""{"success":true}""");
+        }));
+        using var client = new Client("https://hdrezka.test", httpClient: httpClient);
+        var entry = CreateContinueWatchingEntry(isWatched: false);
+
+        var unchanged = await client.Account.SetContinueWatchingWatchedAsync(entry, false);
+        var watched = await client.Account.SetContinueWatchingWatchedAsync(entry, true);
+
+        Assert.Same(entry, unchanged);
+        Assert.True(watched.IsWatched);
+        Assert.Equal(1, requests);
+    }
+
+    [Fact]
+    public async Task RemoveContinueWatchingAsync_SendsSavedPositionId()
+    {
+        using var httpClient = new HttpClient(new StubHttpHandler(async (request, cancellationToken) =>
+        {
+            Assert.Equal("/engine/ajax/cdn_saves_remove.php", request.RequestUri!.AbsolutePath);
+            var form = await ParseFormAsync(request, cancellationToken);
+            Assert.Equal("101", form["id"]);
+            return StubHttpHandler.Json("""{"success":"1"}""");
+        }));
+        using var client = new Client("https://hdrezka.test", httpClient: httpClient);
+
+        await client.Account.RemoveContinueWatchingAsync(101);
+    }
+
+    [Fact]
+    public async Task BookmarkMutations_SendExpectedActions()
+    {
+        var requests = new List<IReadOnlyDictionary<string, string>>();
+        using var httpClient = new HttpClient(new StubHttpHandler(async (request, cancellationToken) =>
+        {
+            Assert.Equal("/ajax/favorites/", request.RequestUri!.AbsolutePath);
+            var form = await ParseFormAsync(request, cancellationToken);
+            requests.Add(form);
+            return form["action"] switch
+            {
+                "add_cat" => StubHttpHandler.Json(
+                    """{"success":true,"id":"42","name":"Watch later"}"""),
+                "add_post" => StubHttpHandler.Json("""{"success":true}"""),
+                "remove_cat" => StubHttpHandler.Json("""{"success":true}"""),
+                _ => throw new InvalidOperationException()
+            };
+        }));
+        using var client = new Client("https://hdrezka.test", httpClient: httpClient);
+
+        var folder = await client.Account.CreateBookmarkFolderAsync("  Watch later  ");
+        await client.Account.ToggleBookmarkAsync(66689, folder.Id);
+        await client.Account.DeleteBookmarkFolderAsync(folder.Id);
+
+        Assert.Equal(42, folder.Id);
+        Assert.Equal("Watch later", folder.Name);
+        Assert.Empty(folder.Items);
+        Assert.Equal(new Uri("https://hdrezka.test/favorites/42/"), folder.Url);
+        Assert.Equal(
+            ["add_cat", "add_post", "remove_cat"],
+            requests.Select(form => form["action"]));
+        Assert.Equal("Watch later", requests[0]["name"]);
+        Assert.Equal("66689", requests[1]["post_id"]);
+        Assert.Equal("42", requests[1]["cat_id"]);
+        Assert.Equal("42", requests[2]["cat_id"]);
+    }
+
+    [Fact]
+    public async Task AccountMutation_WhenRejected_ThrowsReadableException()
+    {
+        using var httpClient = new HttpClient(new StubHttpHandler((_, _) =>
+            Task.FromResult(
+                StubHttpHandler.Json(
+                    """{"success":false,"message":"Authentication required"}"""))));
+        using var client = new Client("https://hdrezka.test", httpClient: httpClient);
+
+        var exception = await Assert.ThrowsAsync<AccountOperationException>(
+            () => client.Account.RemoveContinueWatchingAsync(101));
+
+        Assert.Equal("Authentication required", exception.Message);
+    }
+
+    [Fact]
     public async Task GetProfileAsync_ParsesAccountMetadata()
     {
         using var httpClient = new HttpClient(new StubHttpHandler((request, _) =>
@@ -79,6 +198,37 @@ public sealed class AccountClientTests
         Assert.Equal("First Movie", Assert.Single(folders[0].Items).Title);
         Assert.Equal("Later", folders[1].Name);
         Assert.Equal("Second Series", Assert.Single(folders[1].Items).Title);
+    }
+
+    private static ContinueWatchingEntry CreateContinueWatchingEntry(bool isWatched) =>
+        new(
+            101,
+            "Test Series",
+            new Uri("https://hdrezka.test/series/drama/501-test-series.html"),
+            new Uri("https://hdrezka.test/covers/series.jpg"),
+            MediaCategory.Series,
+            "today",
+            null,
+            "2026",
+            "1 season 1 episode",
+            1,
+            1,
+            "Dub",
+            isWatched,
+            3);
+
+    private static async Task<IReadOnlyDictionary<string, string>> ParseFormAsync(
+        HttpRequestMessage request,
+        CancellationToken cancellationToken)
+    {
+        var content = await request.Content!.ReadAsStringAsync(cancellationToken);
+        return content
+            .Split('&', StringSplitOptions.RemoveEmptyEntries)
+            .Select(pair => pair.Split('=', 2))
+            .ToDictionary(
+                pair => Uri.UnescapeDataString(pair[0].Replace('+', ' ')),
+                pair => Uri.UnescapeDataString(pair[1].Replace('+', ' ')),
+                StringComparer.Ordinal);
     }
 
     private const string ProfileHtml = """

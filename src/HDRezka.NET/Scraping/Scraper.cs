@@ -51,6 +51,7 @@ internal sealed partial class Scraper : IScraper
                     group => group.First(),
                     StringComparer.OrdinalIgnoreCase),
             ParseOtherParts(document, origin, url),
+            ParseBookmarkFolderIds(document),
             document.QuerySelector("#ctrl_favs, [name=\"ctrl_favs\"]")
                 ?.GetAttribute("value") ?? "",
             format == MediaFormat.Series
@@ -134,6 +135,21 @@ internal sealed partial class Scraper : IScraper
             .FirstOrDefault(id => id.HasValue)
             ?? throw new ParseException("Could not determine the media ID.");
     }
+
+    private static IReadOnlyList<long> ParseBookmarkFolderIds(IDocument document) =>
+        document
+            .QuerySelectorAll("#user-favorites-holder .user-fav-check[checked]")
+            .Select(element =>
+                long.TryParse(
+                    element.GetAttribute("value"),
+                    NumberStyles.Integer,
+                    CultureInfo.InvariantCulture,
+                    out var id) &&
+                id > 0
+                    ? id
+                    : throw new ParseException(
+                        "A selected bookmark folder has an invalid identifier."))
+            .ToList();
 
     private static IReadOnlyList<string> ParseNames(IDocument document, Uri url)
     {

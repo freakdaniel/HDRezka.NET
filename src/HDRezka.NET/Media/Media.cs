@@ -18,6 +18,9 @@ public sealed class Media : IDisposable
     private readonly bool _ownsTransport;
     private readonly string _favorites;
     private readonly object _cacheLock = new();
+    private readonly object _bookmarkLock = new();
+    private readonly SemaphoreSlim _bookmarkMutationLock = new(1, 1);
+    private readonly HashSet<long> _bookmarkFolderIds;
     private readonly Dictionary<TranslatorKey, Task<SeriesInfo?>> _seriesInfoByTranslator = [];
     private readonly Dictionary<StreamKey, MediaStream> _streamCache = [];
     private Task<IReadOnlyDictionary<int, SeriesInfo>>? _seriesInfoTask;
@@ -55,6 +58,7 @@ public sealed class Media : IDisposable
         Translators = page.Translators;
         TranslatorsByName = page.TranslatorsByName;
         OtherParts = page.OtherParts;
+        _bookmarkFolderIds = [.. page.BookmarkFolderIds];
         _favorites = page.Favorites;
 
         if (page.InitialSeriesInfo is not null)
@@ -83,6 +87,23 @@ public sealed class Media : IDisposable
     /// Gets the numeric media identifier used by the website API
     /// </summary>
     public int Id { get; }
+
+    /// <summary>
+    /// Gets bookmark folder identifiers selected on the loaded media page
+    /// </summary>
+    /// <value>
+    /// Snapshot of folder identifiers for the authenticated account
+    /// </value>
+    public IReadOnlyCollection<long> BookmarkFolderIds
+    {
+        get
+        {
+            lock (_bookmarkLock)
+            {
+                return _bookmarkFolderIds.ToArray();
+            }
+        }
+    }
 
     /// <summary>
     /// Gets operations for loading paginated comments through the website AJAX endpoint
@@ -500,6 +521,87 @@ public sealed class Media : IDisposable
     }
 
     /// <summary>
+    /// Adds this media to a bookmark folder or removes it when requested
+    /// </summary>
+    /// <param name="folderId">
+    /// Numeric bookmark folder identifier
+    /// </param>
+    /// <param name="isBookmarked">
+    /// <see langword="true"/> to add the media or <see langword="false"/> to remove it
+    /// </param>
+    /// <param name="cancellationToken">
+    /// Token used to cancel the request
+    /// </param>
+    /// <remarks>
+    /// No request is sent when the loaded media page already has the requested state
+    /// </remarks>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// <paramref name="folderId"/> is not positive
+    /// </exception>
+    /// <exception cref="AccountOperationException">
+    /// The website rejected the bookmark change
+    /// </exception>
+    /// <exception cref="HttpException">
+    /// The website returned an unsuccessful HTTP status
+    /// </exception>
+    /// <exception cref="ParseException">
+    /// The response could not be read
+    /// </exception>
+    /// <exception cref="JsonException">
+    /// The bookmark endpoint returned malformed JSON
+    /// </exception>
+    /// <exception cref="HttpRequestException">
+    /// The HTTP request could not be completed
+    /// </exception>
+    /// <exception cref="OperationCanceledException">
+    /// The operation was canceled
+    /// </exception>
+    public async Task SetBookmarkAsync(
+        long folderId,
+        bool isBookmarked,
+        CancellationToken cancellationToken = default)
+    {
+        if (folderId <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(folderId));
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        await _bookmarkMutationLock
+            .WaitAsync(cancellationToken)
+            .ConfigureAwait(false);
+        try
+        {
+            lock (_bookmarkLock)
+            {
+                if (_bookmarkFolderIds.Contains(folderId) == isBookmarked)
+                {
+                    return;
+                }
+            }
+
+            await new AccountClient(_transport, Origin)
+                .ToggleBookmarkAsync(Id, folderId, cancellationToken)
+                .ConfigureAwait(false);
+            lock (_bookmarkLock)
+            {
+                if (isBookmarked)
+                {
+                    _bookmarkFolderIds.Add(folderId);
+                }
+                else
+                {
+                    _bookmarkFolderIds.Remove(folderId);
+                }
+            }
+        }
+        finally
+        {
+            _bookmarkMutationLock.Release();
+        }
+    }
+
+    /// <summary>
     /// Loads a movie stream or one episode stream for a series
     /// </summary>
     /// <param name="season">
@@ -844,9 +946,11 @@ public sealed class Media : IDisposable
                     translator);
                 CacheStream(stream, translator);
             }
-            catch (ParseException)
+            catch (ParseException exception)
             {
-                // Episode information remains usable when the optional initial stream is malformed
+                System.Diagnostics.Trace.TraceWarning(
+                    "The optional initial stream could not be cached: {0}",
+                    exception.Message);
             }
         }
 
@@ -1235,6 +1339,7 @@ public sealed class Media : IDisposable
     /// </summary>
     public void Dispose()
     {
+        _bookmarkMutationLock.Dispose();
         if (_ownsTransport)
         {
             _transport.Dispose();

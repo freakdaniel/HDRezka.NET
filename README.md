@@ -297,6 +297,46 @@ episode, translator, watched state, and remaining episode count when available
 Bookmarks preserve user-created folders and return their media as `CatalogItem`
 instances
 
+Playback progress can be synchronized after loading a stream
+
+```csharp
+using var media = await session.GetAsync(
+    "/series/drama/66689-title.html");
+var stream = await media.GetStreamAsync(season: 1, episode: 4);
+
+await session.Account.SavePlaybackProgressAsync(
+    new PlaybackProgress(
+        media.Id,
+        stream.TranslatorId,
+        stream.Season,
+        stream.Episode,
+        Position: TimeSpan.FromMinutes(18),
+        Duration: TimeSpan.FromMinutes(52)));
+```
+
+The library resolves streams but does not play them, so the application reports
+the current position when playback starts, pauses, seeks, or closes
+
+Continue-watching and bookmark mutations use the same authenticated session
+
+```csharp
+var entry = continueWatching[0];
+entry = await session.Account.SetContinueWatchingWatchedAsync(
+    entry,
+    isWatched: true);
+
+var folder = await session.Account.CreateBookmarkFolderAsync("Watch later");
+await media.SetBookmarkAsync(folder.Id, isBookmarked: true);
+await session.Account.RemoveContinueWatchingAsync(entry.Id);
+await session.Account.DeleteBookmarkFolderAsync(folder.Id);
+```
+
+`Media.BookmarkFolderIds` contains the selected sections from the loaded media
+page, so `SetBookmarkAsync` sends no request when the requested state already
+matches
+
+Deleting a bookmark folder also deletes every bookmark it contains
+
 ## Catalog sections
 
 The four home-page sections and their category filters are available through

@@ -25,6 +25,10 @@ a browser process
 | Fast search | `POST /engine/ajax/search.php` | Compact HTML fragment |
 | Seasons and streams | `POST /ajax/get_cdn_series/` | JSON |
 | Comments | `GET /ajax/get_comments/` | JSON containing HTML fragments |
+| Playback progress | `POST /ajax/send_save/` | JSON |
+| Continue watched state | `POST /engine/ajax/cdn_saves_view.php` | JSON |
+| Continue removal | `POST /engine/ajax/cdn_saves_remove.php` | JSON |
+| Bookmark changes | `POST /ajax/favorites/` | JSON |
 
 The player endpoint name contains `series`, but the website itself uses it for
 both series and films with different `action` values
@@ -67,11 +71,26 @@ catalog result automatically
 
 ## Account-changing endpoints
 
-The website also exposes endpoints for bookmark changes, ratings, watched
-episode state, saved playback position, comment creation, and comment likes.
-They are intentionally separate from read-only scraping because they mutate a
-user account and need explicit API design, validation, and tests before being
-exposed
+Playback progress, continue-watching state, and bookmark changes are exposed as
+explicit `AccountClient` operations
+
+They never run as a side effect of loading a page or resolving a stream
+
+`SavePlaybackProgressAsync` sends the media and translator identifiers together
+with optional season, episode, current position, and duration
+
+`SetContinueWatchingWatchedAsync` uses the state from a loaded
+`ContinueWatchingEntry` and only calls the website toggle when a change is needed
+
+`Media.SetBookmarkAsync` uses the selected folders parsed from the media page
+and calls the website toggle only when the requested state differs
+
+`AccountClient.ToggleBookmarkAsync` exposes the raw checkbox behavior and is
+intentionally named as a toggle because the same `add_post` action handles both
+states
+
+Ratings, watched episode schedule state, comment creation, and comment likes
+remain unexposed until they receive their own validated contracts and tests
 
 ## Performance model
 
