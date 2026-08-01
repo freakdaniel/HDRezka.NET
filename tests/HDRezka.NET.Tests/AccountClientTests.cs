@@ -231,6 +231,139 @@ public sealed class AccountClientTests
                 StringComparer.Ordinal);
     }
 
+    [Fact]
+    public async Task ChangePasswordAsync_LoadsSecurityTokenAndSubmitsBothCopies()
+    {
+        var requestNumber = 0;
+        using var httpClient = new HttpClient(new StubHttpHandler(async (request, _) =>
+        {
+            requestNumber++;
+            if (requestNumber == 1)
+            {
+                Assert.Equal("/settings/security/", request.RequestUri!.AbsolutePath);
+                return StubHttpHandler.Html(SecurityFormHtml);
+            }
+
+            Assert.Equal("/user/1273253/security/", request.RequestUri!.AbsolutePath);
+            var form = await request.Content!.ReadAsStringAsync();
+            Assert.Contains("altpass=current-secret", form);
+            Assert.Contains("password1=new-secret-123", form);
+            Assert.Contains("password2=new-secret-123", form);
+            Assert.Contains("dle_allow_hash=security-token", form);
+            return StubHttpHandler.Html(UpdateSuccessHtml);
+        }));
+        using var client = new Client("https://hdrezka.test", httpClient: httpClient);
+
+        var result = await client.Account.ChangePasswordAsync(
+            "current-secret",
+            "new-secret-123");
+
+        Assert.Equal("Settings were updated", result.Message);
+        Assert.Equal(2, requestNumber);
+    }
+
+    [Fact]
+    public async Task ChangePasswordAsync_ThrowsWebsiteValidationMessage()
+    {
+        var requestNumber = 0;
+        using var httpClient = new HttpClient(new StubHttpHandler((request, _) =>
+        {
+            requestNumber++;
+            return Task.FromResult(
+                StubHttpHandler.Html(
+                    requestNumber == 1 ? SecurityFormHtml : UpdateErrorHtml));
+        }));
+        using var client = new Client("https://hdrezka.test", httpClient: httpClient);
+
+        var exception = await Assert.ThrowsAsync<AccountUpdateException>(
+            () => client.Account.ChangePasswordAsync("wrong-password", "new-secret-123"));
+
+        Assert.Equal("The current password is invalid", exception.Message);
+    }
+
+    [Fact]
+    public async Task SetAvatarAsync_UploadsAndAppliesCenteredCrop()
+    {
+        var requestNumber = 0;
+        using var httpClient = new HttpClient(new StubHttpHandler(async (request, _) =>
+        {
+            requestNumber++;
+            if (requestNumber == 1)
+            {
+                Assert.Equal("/settings/", request.RequestUri!.AbsolutePath);
+                return StubHttpHandler.Html(GeneralFormHtml);
+            }
+
+            Assert.Equal("/engine/ajax/upload_avatar.php", request.RequestUri!.AbsolutePath);
+            if (request.RequestUri.Query.Contains("method=put", StringComparison.Ordinal))
+            {
+                Assert.StartsWith("multipart/form-data", request.Content!.Headers.ContentType!.MediaType);
+                var multipart = await request.Content.ReadAsStringAsync();
+                Assert.Contains("filename=avatar.png", multipart);
+                return StubHttpHandler.Json(
+                    """
+                    {
+                      "success": true,
+                      "message": "",
+                      "url": "uploads/temp/avatar.png",
+                      "imageOriginalWidth": 1000,
+                      "imageOriginalHeight": 800
+                    }
+                    """);
+            }
+
+            Assert.Contains("method=post", request.RequestUri.Query);
+            var crop = await request.Content!.ReadAsStringAsync();
+            Assert.Contains("x1=53", crop);
+            Assert.Contains("y1=0", crop);
+            Assert.Contains("width=525", crop);
+            Assert.Contains("height=420", crop);
+            Assert.Contains("twidth_small=75", crop);
+            Assert.Contains("theight_small=60", crop);
+            Assert.Contains("tempfile=uploads%2Ftemp%2Favatar.png", crop);
+            return StubHttpHandler.Json(
+                """{"success":true,"message":"","small":"uploads/avatar-small.png"}""");
+        }));
+        using var client = new Client("https://hdrezka.test", httpClient: httpClient);
+        using var image = new MemoryStream([1, 2, 3, 4]);
+
+        var result = await client.Account.SetAvatarAsync(image, "avatar.png");
+
+        Assert.Equal(new Uri("https://hdrezka.test/uploads/avatar-small.png"), result.AvatarUrl);
+        Assert.Equal(1000, result.SourceWidth);
+        Assert.Equal(800, result.SourceHeight);
+        Assert.Equal(new AvatarCrop(100, 0, 800), result.Crop);
+        Assert.True(image.CanRead);
+        Assert.Equal(3, requestNumber);
+    }
+
+    [Fact]
+    public async Task RemoveAvatarAsync_PreservesGeneralSettings()
+    {
+        var requestNumber = 0;
+        using var httpClient = new HttpClient(new StubHttpHandler(async (request, _) =>
+        {
+            requestNumber++;
+            if (requestNumber == 1)
+            {
+                return StubHttpHandler.Html(GeneralFormHtml);
+            }
+
+            var form = await request.Content!.ReadAsStringAsync();
+            Assert.Contains("email=test%40example.com", form);
+            Assert.Contains("gender=1", form);
+            Assert.Contains("del_foto=yes", form);
+            Assert.Contains("doaction=save_general", form);
+            return StubHttpHandler.Html(UpdateSuccessHtml);
+        }));
+        using var client = new Client("https://hdrezka.test", httpClient: httpClient);
+
+        var result = await client.Account.RemoveAvatarAsync();
+
+        Assert.Equal("Settings were updated", result.Message);
+        Assert.Equal(2, requestNumber);
+    }
+
     private const string ProfileHtml = """
         <!doctype html>
         <html>
@@ -243,6 +376,48 @@ public sealed class AccountClientTests
           <div id="avatar-profile"><img src="https://cdn.test/avatar.jpg"></div>
         </body>
         </html>
+        """;
+
+    private const string SecurityFormHtml = """
+        <!doctype html>
+        <html>
+        <head><title>Test User</title></head>
+        <body>
+          <form id="userinfo" action="/user/1273253/security/" method="post">
+            <input name="username_id" value="1273253">
+            <input name="dle_allow_hash" value="security-token">
+          </form>
+        </body>
+        </html>
+        """;
+
+    private const string GeneralFormHtml = """
+        <!doctype html>
+        <html>
+        <head><title>Test User</title></head>
+        <body>
+          <form id="userinfo" action="/user/1273253/" method="post">
+            <input name="email" value="test@example.com">
+            <select name="gender"><option value="1" selected>male</option></select>
+            <input name="username_id" value="1273253">
+            <input name="dle_allow_hash" value="security-token">
+          </form>
+        </body>
+        </html>
+        """;
+
+    private const string UpdateSuccessHtml = """
+        <html><body>
+          <div class="b-info__message">Settings were updated</div>
+        </body></html>
+        """;
+
+    private const string UpdateErrorHtml = """
+        <html><body>
+          <div class="b-info__message">
+            <div class="b-list-errors"><ul><li>The current password is invalid</li></ul></div>
+          </div>
+        </body></html>
         """;
 
     private const string ContinueWatchingHtml = """

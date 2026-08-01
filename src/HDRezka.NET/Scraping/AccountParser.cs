@@ -99,6 +99,65 @@ internal static partial class AccountParser
             CatalogParser.ParseItems(document, origin));
     }
 
+    public static async Task<AccountFormSnapshot> ParseUpdateFormAsync(
+        string html,
+        Uri origin,
+        CancellationToken cancellationToken)
+    {
+        var document = await Parsing.ParseDocumentAsync(html, cancellationToken)
+            .ConfigureAwait(false);
+        Parsing.ThrowForChallengePage(document);
+        var form = document.QuerySelector("form#userinfo") ??
+            throw new ParseException("The account settings page has no update form.");
+        var actionValue = form.GetAttribute("action");
+        if (string.IsNullOrWhiteSpace(actionValue))
+        {
+            throw new ParseException("The account update form has no action URL.");
+        }
+
+        var userId = ParseRequiredInt(
+            form.QuerySelector("input[name=\"username_id\"]")?.GetAttribute("value"),
+            "account identifier");
+        var hash = form
+            .QuerySelector("input[name=\"dle_allow_hash\"]")
+            ?.GetAttribute("value")
+            ?.Trim();
+        if (string.IsNullOrWhiteSpace(hash))
+        {
+            throw new ParseException("The account update form has no security token.");
+        }
+
+        return new AccountFormSnapshot(
+            new Uri(origin, actionValue),
+            userId,
+            hash,
+            form.QuerySelector("input[name=\"email\"]")?.GetAttribute("value") ?? "",
+            form.QuerySelector("select[name=\"gender\"] option[selected]")
+                ?.GetAttribute("value") ?? "");
+    }
+
+    public static async Task<AccountUpdateResult> ParseUpdateResponseAsync(
+        string html,
+        CancellationToken cancellationToken)
+    {
+        var document = await Parsing.ParseDocumentAsync(html, cancellationToken)
+            .ConfigureAwait(false);
+        Parsing.ThrowForChallengePage(document);
+        var errors = document
+            .QuerySelectorAll(".b-list-errors li")
+            .Select(item => NormalizeText(item.TextContent))
+            .Where(message => !string.IsNullOrWhiteSpace(message))
+            .ToList();
+        if (errors.Count > 0)
+        {
+            throw new AccountUpdateException(string.Join(" ", errors));
+        }
+
+        var message = NormalizeText(
+            document.QuerySelector(".b-info__message")?.TextContent ?? "");
+        return new AccountUpdateResult(message);
+    }
+
     private static ContinueWatchingEntry ParseContinueWatchingItem(
         IElement item,
         Uri origin)
@@ -205,11 +264,24 @@ internal static partial class AccountParser
     private static Uri? TryParseUri(Uri origin, string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : new Uri(origin, value);
 
+    private static string NormalizeText(string value) =>
+        WhitespaceRegex().Replace(value, " ").Trim();
+
     [GeneratedRegex(
         @"(?<season>\d+)\s+сезон\s+(?<episode>\d+)\s+серия(?:\s+\((?<translator>[^)]+)\))?",
         RegexOptions.IgnoreCase)]
     private static partial Regex PlaybackRegex();
+
+    [GeneratedRegex(@"\s+")]
+    private static partial Regex WhitespaceRegex();
 }
+
+internal sealed record AccountFormSnapshot(
+    Uri Action,
+    int UserId,
+    string SecurityToken,
+    string Email,
+    string Gender);
 
 internal sealed record BookmarkPageSnapshot(
     IReadOnlyList<BookmarkFolderReference> Folders,

@@ -51,6 +51,150 @@ public sealed class CommentClientTests
         Assert.Equal(1, page.Items[1].Depth);
     }
 
+    [Fact]
+    public async Task AddAsync_SubmitsAuthenticatedCommentFields()
+    {
+        var requestNumber = 0;
+        using var httpClient = new HttpClient(new StubHttpHandler(async (request, _) =>
+        {
+            requestNumber++;
+            if (requestNumber == 1)
+            {
+                return StubHttpHandler.Html(MediaHtml);
+            }
+
+            Assert.Equal("/ajax/add_comment/", request.RequestUri!.AbsolutePath);
+            Assert.Equal(
+                "https://hdrezka.test/films/drama/123-test.html",
+                request.Headers.Referrer!.AbsoluteUri);
+            var form = await request.Content!.ReadAsStringAsync();
+            Assert.Contains("comments=A+useful+review", form);
+            Assert.Contains("post_id=123", form);
+            Assert.Contains("parent=0", form);
+            Assert.Contains("replyto_id=0", form);
+            return StubHttpHandler.Json(
+                """
+                {
+                  "success": true,
+                  "on_moderation": false,
+                  "comment_id": 701,
+                  "message": "<div>Comment was published</div>"
+                }
+                """);
+        }));
+        using var media = await Media.CreateAsync(
+            "https://hdrezka.test/films/drama/123-test.html",
+            httpClient: httpClient);
+
+        var result = await media.Comments.AddAsync("A useful review");
+
+        Assert.Equal(701, result.Id);
+        Assert.Null(result.ParentId);
+        Assert.False(result.IsPendingModeration);
+        Assert.Equal("Comment was published", result.Message);
+    }
+
+    [Fact]
+    public async Task ReplyAsync_SubmitsParentIdentifiers()
+    {
+        var requestNumber = 0;
+        using var httpClient = new HttpClient(new StubHttpHandler(async (request, _) =>
+        {
+            requestNumber++;
+            if (requestNumber == 1)
+            {
+                return StubHttpHandler.Html(MediaHtml);
+            }
+
+            var form = await request.Content!.ReadAsStringAsync();
+            Assert.Contains("parent=101", form);
+            Assert.Contains("replyto_id=101", form);
+            return StubHttpHandler.Json(
+                """
+                {
+                  "success": true,
+                  "on_moderation": true,
+                  "comment_id": 702,
+                  "message": "Reply is waiting for moderation"
+                }
+                """);
+        }));
+        using var media = await Media.CreateAsync(
+            "https://hdrezka.test/films/drama/123-test.html",
+            httpClient: httpClient);
+
+        var result = await media.Comments.ReplyAsync(101, "A detailed reply");
+
+        Assert.Equal(702, result.Id);
+        Assert.Equal(101, result.ParentId);
+        Assert.True(result.IsPendingModeration);
+    }
+
+    [Fact]
+    public async Task AddAsync_ThrowsEveryWebsiteValidationMessage()
+    {
+        var requestNumber = 0;
+        using var httpClient = new HttpClient(new StubHttpHandler((request, _) =>
+        {
+            requestNumber++;
+            return Task.FromResult(
+                requestNumber == 1
+                    ? StubHttpHandler.Html(MediaHtml)
+                    : StubHttpHandler.Json(
+                        """
+                        {
+                          "success": false,
+                          "on_moderation": false,
+                          "comment_id": 0,
+                          "message": ["Comment is too short", "Try again later"]
+                        }
+                        """));
+        }));
+        using var media = await Media.CreateAsync(
+            "https://hdrezka.test/films/drama/123-test.html",
+            httpClient: httpClient);
+
+        var exception = await Assert.ThrowsAsync<CommentOperationException>(
+            () => media.Comments.AddAsync("Short but not empty"));
+
+        Assert.Equal("Comment is too short Try again later", exception.Message);
+    }
+
+    [Fact]
+    public async Task DeleteAsync_LoadsSecurityTokenAndDeletesOwnedComment()
+    {
+        var requestNumber = 0;
+        using var httpClient = new HttpClient(new StubHttpHandler((request, _) =>
+        {
+            requestNumber++;
+            if (requestNumber == 1)
+            {
+                return Task.FromResult(StubHttpHandler.Html(MediaHtml));
+            }
+
+            if (requestNumber == 2)
+            {
+                Assert.Equal("/settings/", request.RequestUri!.AbsolutePath);
+                return Task.FromResult(StubHttpHandler.Html(SettingsFormHtml));
+            }
+
+            Assert.Equal("/engine/ajax/deletecomments.php", request.RequestUri!.AbsolutePath);
+            Assert.Contains("id=701", request.RequestUri.Query);
+            Assert.Contains("dle_allow_hash=delete-token", request.RequestUri.Query);
+            Assert.Contains("type=0", request.RequestUri.Query);
+            Assert.Contains("area=ajax", request.RequestUri.Query);
+            return Task.FromResult(
+                StubHttpHandler.Json("""{"success":true,"message":""}"""));
+        }));
+        using var media = await Media.CreateAsync(
+            "https://hdrezka.test/films/drama/123-test.html",
+            httpClient: httpClient);
+
+        await media.Comments.DeleteAsync(701);
+
+        Assert.Equal(3, requestNumber);
+    }
+
     private const string CommentsHtml = """
         <ol class="comments-tree-list">
           <li class="comments-tree-item" data-id="101" data-indent="0">
@@ -88,6 +232,18 @@ public sealed class CommentClientTests
           <input id="post_id" value="123">
           <h1 class="b-post__title">Commented movie</h1>
           <ul id="translators-list"><li data-translator_id="56">Dub</li></ul>
+        </body>
+        </html>
+        """;
+
+    private const string SettingsFormHtml = """
+        <html>
+        <head><title>Test User</title></head>
+        <body>
+          <form id="userinfo" action="/user/1273253/">
+            <input name="username_id" value="1273253">
+            <input name="dle_allow_hash" value="delete-token">
+          </form>
         </body>
         </html>
         """;

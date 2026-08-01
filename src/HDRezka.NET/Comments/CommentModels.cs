@@ -61,3 +61,24 @@ public sealed record CommentPage(
     int Page,
     int TotalPages,
     long? LastUpdateId);
+
+/// <summary>
+/// Describes a comment or reply accepted by the website
+/// </summary>
+/// <param name="Id">
+/// Numeric identifier assigned to the created comment
+/// </param>
+/// <param name="ParentId">
+/// Parent comment identifier, or <see langword="null"/> for a root comment
+/// </param>
+/// <param name="IsPendingModeration">
+/// <see langword="true"/> when the website accepted the comment for moderation instead of publishing it immediately
+/// </param>
+/// <param name="Message">
+/// Confirmation text returned by the website with markup removed
+/// </param>
+public sealed record CommentSubmission(
+    long Id,
+    long? ParentId,
+    bool IsPendingModeration,
+    string Message);

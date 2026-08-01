@@ -9,11 +9,11 @@ responsibilities are separated by directory:
 | Directory | Responsibility |
 | --- | --- |
 | `Client` | Main entry point, configuration, authentication state, and cookie helpers |
-| `Account` | Profile metadata, continue-watching history, and bookmarks |
+| `Account` | Profile metadata, password and avatar changes, continue-watching history, and bookmarks |
 | `Catalog` | Home-page catalog sections and shared media card models |
 | `Collections` | Curated collection directory and collection contents |
-| `Comments` | Paginated comment AJAX client and comment models |
-| `Media` | Media facade, metadata, streams, subtitles, translators, seasons, and episodes |
+| `Comments` | Comment loading, creation, replies, deletion, and models |
+| `Media` | Media facade, metadata, internal ratings, streams, subtitles, translators, seasons, and episodes |
 | `Search` | Fast and full catalog search |
 | `Exceptions` | Public library exception hierarchy |
 | `Abstractions` | Internal contracts shared by clients and parsers |

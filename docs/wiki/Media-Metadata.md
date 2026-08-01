@@ -35,6 +35,21 @@ Console.WriteLine(media.Format);
 Console.WriteLine(media.Category);
 ```
 
+`Rating` is the internal aggregate score submitted by HDRezka users, not an
+external service score. `Rating.Value` and `Rating.Votes` are nullable when the
+page has no recognizable rating. External scores remain available through
+`Details.ExternalRatings`.
+
+An authenticated account can submit an integer score from 1 through 10:
+
+```csharp
+var updated = await media.RateAsync(9, cancellationToken);
+Console.WriteLine($"{updated.Value} ({updated.Votes})");
+```
+
+The method also updates `media.Rating`. The website can reject a repeated vote
+from the same account, which is reported as `RatingException`.
+
 `Names` and `OriginalNames` preserve all parsed title variants, where `Name` is the
 first localized title, while `OriginalName` is the last original title or
 `null`
@@ -147,9 +162,23 @@ Comments are loaded separately through the website AJAX endpoint:
 
 ```csharp
 var page = await media.Comments.GetPageAsync(page: 1);
+
+var created = await media.Comments.AddAsync(
+    "A detailed review that follows the website rules",
+    cancellationToken);
+var reply = await media.Comments.ReplyAsync(
+    created.Id,
+    "A reply to the review",
+    cancellationToken);
+await media.Comments.DeleteAsync(reply.Id, cancellationToken);
 ```
 
 `CommentPage` contains nested comments in website order, current and total page
 numbers, and the latest update identifier. Each comment exposes its parent
 identifier, nesting depth, author, avatar, date label, text, like count, and
 permalink
+
+Creation, replies, and deletion require an authenticated account and can be
+rejected by moderation, captcha, ownership checks, or comment rules. The live
+website exposes deletion for a user's own comments but does not expose comment
+editing, so the library intentionally has no edit method.

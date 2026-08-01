@@ -28,6 +28,58 @@ Console.WriteLine(profile.ContinueWatchingCount);
 `Tier` contains the subscription tier detected from account data, while
 `IsPremium` is a convenience property for checking `AccountTier.Premium`.
 
+## Change password
+
+```csharp
+var result = await client.Account.ChangePasswordAsync(
+    currentPassword: "current-password",
+    newPassword: "new-password",
+    cancellationToken: cancellationToken);
+
+Console.WriteLine(result.Message);
+```
+
+The website requires the current password, verifies that both submitted copies
+of the new password match, and rejects passwords shorter than eight characters.
+The library sends the confirmation copy automatically and never stores either
+password in account models or options.
+
+## Change avatar
+
+```csharp
+await using var image = File.OpenRead("avatar.png");
+var result = await client.Account.SetAvatarAsync(
+    image,
+    "avatar.png",
+    cancellationToken: cancellationToken);
+
+Console.WriteLine(result.AvatarUrl);
+```
+
+The website first uploads a temporary image and then creates a 60 by 60 pixel
+avatar from a square crop. PNG and JPEG uploads are confirmed, and the source
+image must be at least 60 by 60 pixels. No client-side maximum file size is
+published by the website, so server validation remains authoritative.
+
+Without an explicit crop, the largest centered square is used. Custom crop
+coordinates refer to the original image:
+
+```csharp
+var crop = new AvatarCrop(X: 100, Y: 40, Size: 600);
+var result = await client.Account.SetAvatarAsync(
+    image,
+    "avatar.jpg",
+    crop,
+    cancellationToken);
+```
+
+Remove the current avatar while preserving the existing email and gender
+settings:
+
+```csharp
+await client.Account.RemoveAvatarAsync(cancellationToken);
+```
+
 ## Continue watching
 
 ```csharp
@@ -163,3 +215,6 @@ failures, and `OperationCanceledException` when canceled.
 
 Account-changing requests also throw `AccountOperationException` when the
 website returns a readable rejection message
+
+Profile changes additionally throw `AccountUpdateException` when the website
+rejects a password, image, crop, or avatar removal

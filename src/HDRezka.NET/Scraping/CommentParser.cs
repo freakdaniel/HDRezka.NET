@@ -36,6 +36,19 @@ internal static class CommentParser
             lastUpdateId);
     }
 
+    public static async Task<string> ParseMessageAsync(
+        IEnumerable<string> fragments,
+        CancellationToken cancellationToken)
+    {
+        var document = await Parsing.ParseDocumentAsync(
+            string.Join(" ", fragments),
+            cancellationToken).ConfigureAwait(false);
+        return string.Join(
+            " ",
+            (document.Body?.TextContent ?? "")
+                .Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+    }
+
     private static Comment ParseComment(IElement item, Uri origin, Uri mediaUrl)
     {
         var id = ParseRequiredLong(item.GetAttribute("data-id"), "comment ID");

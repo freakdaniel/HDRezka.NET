@@ -80,6 +80,61 @@ public sealed class MediaTests
     }
 
     [Fact]
+    public async Task RateAsync_SubmitsVoteAndUpdatesInternalRating()
+    {
+        var requestNumber = 0;
+        using var client = CreateClient((request, _) =>
+        {
+            requestNumber++;
+            if (requestNumber == 1)
+            {
+                return Task.FromResult(StubHttpHandler.Html(MovieHtml));
+            }
+
+            Assert.Equal("/engine/ajax/rating.php", request.RequestUri!.AbsolutePath);
+            Assert.Contains("news_id=123", request.RequestUri.Query);
+            Assert.Contains("go_rate=9", request.RequestUri.Query);
+            Assert.Contains("skin=hdrezka", request.RequestUri.Query);
+            return Task.FromResult(
+                StubHttpHandler.Json(
+                    """{"success":true,"num":"8.41","votes":1235,"message":""}"""));
+        });
+        using var media = await Media.CreateAsync(
+            "https://hdrezka.test/films/drama/123-test.html",
+            httpClient: client);
+
+        var rating = await media.RateAsync(9);
+
+        Assert.Equal(8.41, rating.Value);
+        Assert.Equal(1235, rating.Votes);
+        Assert.Same(rating, media.Rating);
+        Assert.Equal(2, requestNumber);
+    }
+
+    [Fact]
+    public async Task RateAsync_ThrowsWebsiteMessageWhenVoteIsRejected()
+    {
+        var requestNumber = 0;
+        using var client = CreateClient((request, _) =>
+        {
+            requestNumber++;
+            return Task.FromResult(
+                requestNumber == 1
+                    ? StubHttpHandler.Html(MovieHtml)
+                    : StubHttpHandler.Json(
+                        """{"success":false,"message":"You have already voted"}"""));
+        });
+        using var media = await Media.CreateAsync(
+            "https://hdrezka.test/films/drama/123-test.html",
+            httpClient: client);
+
+        var exception = await Assert.ThrowsAsync<RatingException>(() => media.RateAsync(9));
+
+        Assert.Equal("You have already voted", exception.Message);
+        Assert.Equal(8.4, media.Rating.Value);
+    }
+
+    [Fact]
     public async Task SortTranslators_AppliesPreferredAndNonPreferredLists()
     {
         using var client = CreateClient((_, _) =>

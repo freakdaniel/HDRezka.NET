@@ -38,6 +38,16 @@ public sealed class AuthenticationTests
         Assert.NotNull(profile.AvatarUrl);
         Assert.Equal(login.AccountTier, profile.Tier);
 
+        await Assert.ThrowsAsync<AccountUpdateException>(() =>
+            client.Account.ChangePasswordAsync(
+                "DefinitelyWrongCurrentPassword123!!",
+                "ValidTemporaryPassword123!!"));
+        using (var invalidAvatar = new MemoryStream([1, 2, 3, 4]))
+        {
+            await Assert.ThrowsAsync<AccountUpdateException>(() =>
+                client.Account.SetAvatarAsync(invalidAvatar, "avatar.txt"));
+        }
+
         var continueWatching = await client.Account.GetContinueWatchingAsync();
         Assert.NotEmpty(continueWatching);
         Assert.All(continueWatching, item =>

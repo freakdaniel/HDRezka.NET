@@ -94,6 +94,10 @@ using var media = await Media.CreateAsync(
 cast, quality, age rating, tagline, external ratings, collections, rankings,
 recommendations, and series schedule when present
 
+`media.Rating` is the aggregate rating submitted by HDRezka users. Ratings
+imported from IMDb, Kinopoisk, and other services are available separately
+through `media.Details.ExternalRatings`
+
 All network methods accept a `CancellationToken`
 
 ## Comments
@@ -108,7 +112,33 @@ foreach (var comment in comments.Items)
 {
     Console.WriteLine($"{comment.Author}: {comment.Text}");
 }
+
+var created = await media.Comments.AddAsync(
+    "A detailed review that follows the website rules");
+var reply = await media.Comments.ReplyAsync(
+    created.Id,
+    "A reply to the published comment");
+await media.Comments.DeleteAsync(reply.Id);
 ```
+
+Comment creation, replies, and deletion require an authenticated account.
+The website does not expose comment editing, so the library does not emulate
+it by deleting and reposting content
+
+## Internal rating
+
+The current aggregate HDRezka rating is loaded with the media page. An
+authenticated account can submit one integer score from 1 through 10:
+
+```csharp
+Console.WriteLine($"{media.Rating.Value} from {media.Rating.Votes} votes");
+
+var updatedRating = await media.RateAsync(9);
+Console.WriteLine($"{updatedRating.Value} from {updatedRating.Votes} votes");
+```
+
+The website can reject repeated voting by the same account. A rejected vote
+throws `RatingException`
 
 ## Streams
 
@@ -343,6 +373,24 @@ matches
 
 Deleting a bookmark folder also deletes every bookmark it contains
 
+Password and avatar changes use the same authenticated session:
+
+```csharp
+await session.Account.ChangePasswordAsync(
+    currentPassword: "current-password",
+    newPassword: "new-password");
+
+await using var avatar = File.OpenRead("avatar.png");
+var avatarResult = await session.Account.SetAvatarAsync(
+    avatar,
+    "avatar.png");
+```
+
+The website requires passwords with at least eight characters. Avatar upload
+is confirmed for PNG and JPEG images with dimensions of at least 60 by 60
+pixels. By default the library applies the largest centered square crop; pass
+an `AvatarCrop` to select another square in original image coordinates
+
 ## Catalog sections
 
 The four home-page sections and their category filters are available through
@@ -445,11 +493,11 @@ responsibilities remain separated by directories without introducing extra
 projects or NuGet dependencies:
 
 - `Client`: client entry point, options, authentication state, and cookie helpers
-- `Account`: profile, continue-watching history, and bookmark models
+- `Account`: profile metadata and changes, continue-watching history, and bookmarks
 - `Catalog`: home-page catalog sections and shared media cards
 - `Collections`: curated collection directory and content
-- `Comments`: paginated AJAX comments
-- `Media`: media facade, streams, subtitles, translators, seasons, and episodes
+- `Comments`: loading, creation, replies, and deletion
+- `Media`: media facade, internal ratings, streams, subtitles, translators, seasons, and episodes
 - `Search`: search client and result models
 - `Exceptions`: public library exceptions
 - `Abstractions`: internal contracts shared by the client and parsers
@@ -466,6 +514,9 @@ Library-specific failures derive from `ApiException`:
 
 - `LoginRequiredException`
 - `LoginFailedException`
+- `AccountUpdateException`
+- `CommentOperationException`
+- `RatingException`
 - `PremiumRequiredException`
 - `CaptchaException`
 - `StreamFetchException`

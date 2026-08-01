@@ -10,6 +10,9 @@ use standard .NET exceptions
 | --- | --- | --- |
 | `LoginRequiredException` | The requested page requires an authenticated account | Log in and retry with the same client |
 | `LoginFailedException` | Credentials were rejected or the session could not be verified | Ask for new credentials; do not retry indefinitely |
+| `AccountUpdateException` | A password or avatar change was rejected | Show the website validation message and keep the previous profile data |
+| `CommentOperationException` | Comment creation, reply, or deletion was rejected | Check authentication, ownership, moderation, and comment rules |
+| `RatingException` | An internal rating was rejected | Do not retry an account that has already voted |
 | `PremiumRequiredException` | Content, a translation, or a quality is Premium-only | Offer an available alternative or require Premium |
 | `CaptchaException` | The website requested interactive captcha verification | Stop automation and let the user complete verification |
 | `StreamFetchException` | No usable stream or translator was returned | Try another translation or report temporary unavailability |

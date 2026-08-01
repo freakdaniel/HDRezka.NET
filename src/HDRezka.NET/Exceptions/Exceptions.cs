@@ -67,6 +67,48 @@ public sealed class AccountOperationException : ApiException
 }
 
 /// <summary>
+/// Indicates that the website rejected an account profile change
+/// </summary>
+public sealed class AccountUpdateException : ApiException
+{
+    /// <summary>
+    /// Creates an account update failure with the reason returned by the website
+    /// </summary>
+    /// <param name="message">
+    /// Text explaining why the account change was rejected
+    /// </param>
+    public AccountUpdateException(string message) : base(message) { }
+}
+
+/// <summary>
+/// Indicates that the website rejected creation, reply, or deletion of a comment
+/// </summary>
+public sealed class CommentOperationException : ApiException
+{
+    /// <summary>
+    /// Creates a comment operation failure with the reason returned by the website
+    /// </summary>
+    /// <param name="message">
+    /// Text explaining why the comment operation was rejected
+    /// </param>
+    public CommentOperationException(string message) : base(message) { }
+}
+
+/// <summary>
+/// Indicates that the website rejected a media rating
+/// </summary>
+public sealed class RatingException : ApiException
+{
+    /// <summary>
+    /// Creates a rating failure with the reason returned by the website
+    /// </summary>
+    /// <param name="message">
+    /// Text explaining why the rating was rejected
+    /// </param>
+    public RatingException(string message) : base(message) { }
+}
+
+/// <summary>
 /// Identifies the Premium-protected resource requested by the caller
 /// </summary>
 public enum PremiumFeature

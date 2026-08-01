@@ -2,6 +2,7 @@ using System.Net;
 using System.IO.Compression;
 using System.Text;
 using System.Text.Json;
+using System.Net.Http.Headers;
 using HdRezka.Abstractions;
 
 namespace HdRezka.Http;
@@ -83,9 +84,43 @@ internal sealed class HttpTransport : IHttpTransport
     public async Task<T> PostFormJsonAsync<T>(
         Uri uri,
         IEnumerable<KeyValuePair<string, string>> data,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        Uri? referrer = null)
     {
-        var json = await PostFormAsync(uri, data, cancellationToken).ConfigureAwait(false);
+        var json = await PostFormAsync(uri, data, cancellationToken, referrer)
+            .ConfigureAwait(false);
+        return JsonSerializer.Deserialize<T>(json, JsonOptions) ??
+            throw new ParseException("The server returned an empty JSON response.");
+    }
+
+    public async Task<T> PostMultipartJsonAsync<T>(
+        Uri uri,
+        IReadOnlyDictionary<string, string> fields,
+        string fileFieldName,
+        ReadOnlyMemory<byte> file,
+        string fileName,
+        string contentType,
+        CancellationToken cancellationToken = default,
+        Uri? referrer = null)
+    {
+        using var content = new MultipartFormDataContent();
+        foreach (var field in fields)
+        {
+            content.Add(new StringContent(field.Value), field.Key);
+        }
+
+        var fileContent = new ByteArrayContent(file.ToArray());
+        fileContent.Headers.ContentType = MediaTypeHeaderValue.Parse(contentType);
+        content.Add(fileContent, fileFieldName, fileName);
+        using var request = CreateRequest(HttpMethod.Post, uri);
+        request.Headers.Referrer = referrer;
+        request.Content = content;
+        using var response = await _client.SendAsync(
+            request,
+            HttpCompletionOption.ResponseHeadersRead,
+            cancellationToken).ConfigureAwait(false);
+        var json = await ReadResponseAsync(response, uri, cancellationToken)
+            .ConfigureAwait(false);
         return JsonSerializer.Deserialize<T>(json, JsonOptions) ??
             throw new ParseException("The server returned an empty JSON response.");
     }

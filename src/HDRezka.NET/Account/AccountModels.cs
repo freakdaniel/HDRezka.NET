@@ -40,6 +40,49 @@ public sealed record AccountProfile(
 }
 
 /// <summary>
+/// Defines a square avatar crop in pixels of the original uploaded image
+/// </summary>
+/// <param name="X">
+/// Horizontal offset of the crop from the left image edge
+/// </param>
+/// <param name="Y">
+/// Vertical offset of the crop from the top image edge
+/// </param>
+/// <param name="Size">
+/// Width and height of the square crop
+/// </param>
+public sealed record AvatarCrop(int X, int Y, int Size);
+
+/// <summary>
+/// Describes an avatar accepted and cropped by the website
+/// </summary>
+/// <param name="AvatarUrl">
+/// Absolute URL of the generated 60 by 60 pixel avatar
+/// </param>
+/// <param name="SourceWidth">
+/// Width of the uploaded source image in pixels
+/// </param>
+/// <param name="SourceHeight">
+/// Height of the uploaded source image in pixels
+/// </param>
+/// <param name="Crop">
+/// Crop applied in coordinates of the original source image
+/// </param>
+public sealed record AvatarUpdateResult(
+    Uri AvatarUrl,
+    int SourceWidth,
+    int SourceHeight,
+    AvatarCrop Crop);
+
+/// <summary>
+/// Describes an account setting change accepted by the website
+/// </summary>
+/// <param name="Message">
+/// Confirmation text returned by the website, or an empty string when no text was provided
+/// </param>
+public sealed record AccountUpdateResult(string Message);
+
+/// <summary>
 /// Describes one saved viewing position from the continue-watching page
 /// </summary>
 /// <param name="Id">

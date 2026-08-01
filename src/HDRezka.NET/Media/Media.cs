@@ -175,9 +175,75 @@ public sealed class Media : IDisposable
     public MediaDetails Details { get; }
 
     /// <summary>
-    /// Gets the rating value and vote count parsed from the page
+    /// Gets the internal HDRezka user rating and vote count parsed from the page or returned after <see cref="RateAsync"/>
     /// </summary>
-    public Rating Rating { get; }
+    public Rating Rating { get; private set; }
+
+    /// <summary>
+    /// Submits the authenticated user's internal HDRezka rating for this media
+    /// </summary>
+    /// <param name="value">
+    /// Integer rating from one through ten
+    /// </param>
+    /// <param name="cancellationToken">
+    /// Token used to cancel rating submission and response parsing
+    /// </param>
+    /// <returns>
+    /// Updated aggregate HDRezka rating and vote count
+    /// </returns>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// <paramref name="value"/> is outside the inclusive range from one through ten
+    /// </exception>
+    /// <exception cref="RatingException">
+    /// Authentication is missing, the account has already voted, or the website rejected the rating
+    /// </exception>
+    /// <exception cref="HttpException">
+    /// The website returned an unsuccessful HTTP status
+    /// </exception>
+    /// <exception cref="ParseException">
+    /// The rating response did not contain a numeric value and vote count
+    /// </exception>
+    /// <exception cref="System.Text.Json.JsonException">
+    /// The rating endpoint returned malformed JSON
+    /// </exception>
+    /// <exception cref="HttpRequestException">
+    /// The HTTP request could not be completed
+    /// </exception>
+    /// <exception cref="OperationCanceledException">
+    /// The operation was canceled
+    /// </exception>
+    public async Task<Rating> RateAsync(
+        int value,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(value, 1);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(value, 10);
+        var response = await _transport.GetJsonAsync<RatingResponse>(
+            new Uri(Origin, "/engine/ajax/rating.php"),
+            new Dictionary<string, string?>
+            {
+                ["news_id"] = Id.ToString(CultureInfo.InvariantCulture),
+                ["go_rate"] = value.ToString(CultureInfo.InvariantCulture),
+                ["skin"] = "hdrezka"
+            },
+            cancellationToken).ConfigureAwait(false);
+        if (!response.Success)
+        {
+            throw new RatingException(
+                GetString(response.Message) ?? "The website rejected the rating.");
+        }
+
+        var ratingValue = TryGetDouble(response.Num);
+        var votes = TryGetInt32(response.Votes);
+        if (!ratingValue.HasValue || !votes.HasValue)
+        {
+            throw new ParseException(
+                "The rating response has no numeric value or vote count.");
+        }
+
+        Rating = new Rating(ratingValue, votes);
+        return Rating;
+    }
 
     /// <summary>
     /// Gets the subscription tier detected for the session that loaded this page
@@ -1278,6 +1344,30 @@ public sealed class Media : IDisposable
             _ => false
         };
 
+    private static double? TryGetDouble(JsonElement element)
+    {
+        var value = GetString(element);
+        return double.TryParse(
+            value,
+            NumberStyles.Float,
+            CultureInfo.InvariantCulture,
+            out var result)
+                ? result
+                : null;
+    }
+
+    private static int? TryGetInt32(JsonElement element)
+    {
+        var value = GetString(element);
+        return int.TryParse(
+            value,
+            NumberStyles.Integer,
+            CultureInfo.InvariantCulture,
+            out var result)
+                ? result
+                : null;
+    }
+
     private void ThrowIfPremiumTranslationUnavailable(Translator translator)
     {
         if (translator.IsPremium && AccountTier == AccountTier.Standard)
@@ -1357,6 +1447,12 @@ public sealed class Media : IDisposable
         [property: JsonPropertyName("subtitle_def")] JsonElement DefaultSubtitle,
         [property: JsonPropertyName("thumbnails")] JsonElement Thumbnails,
         [property: JsonPropertyName("premium_content")] JsonElement PremiumContent);
+
+    private sealed record RatingResponse(
+        bool Success,
+        JsonElement Num,
+        JsonElement Votes,
+        JsonElement Message);
 
     private readonly record struct TranslatorKey(
         int Id,

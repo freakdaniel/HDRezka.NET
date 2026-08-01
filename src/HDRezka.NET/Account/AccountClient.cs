@@ -7,7 +7,7 @@ using HdRezka.Scraping;
 namespace HdRezka;
 
 /// <summary>
-/// Loads profile metadata, saved viewing positions, and user bookmarks
+/// Loads and changes profile data, saved viewing positions, and user bookmarks
 /// </summary>
 public sealed class AccountClient
 {
@@ -57,6 +57,263 @@ public sealed class AccountClient
             html,
             _origin,
             cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Changes the password of the current authenticated account
+    /// </summary>
+    /// <param name="currentPassword">
+    /// Current account password used by the website to authorize the change
+    /// </param>
+    /// <param name="newPassword">
+    /// New password containing at least eight characters
+    /// </param>
+    /// <param name="cancellationToken">
+    /// Token used to cancel settings loading and password submission
+    /// </param>
+    /// <returns>
+    /// Confirmation information returned by the website
+    /// </returns>
+    /// <exception cref="ArgumentException">
+    /// <paramref name="currentPassword"/> is empty, or <paramref name="newPassword"/> is empty or shorter than eight characters
+    /// </exception>
+    /// <exception cref="LoginRequiredException">
+    /// The website returned its login page
+    /// </exception>
+    /// <exception cref="CaptchaException">
+    /// The website requested captcha verification
+    /// </exception>
+    /// <exception cref="AccountUpdateException">
+    /// The current password is invalid or the website rejected the new password
+    /// </exception>
+    /// <exception cref="HttpException">
+    /// The website returned an unsuccessful HTTP status
+    /// </exception>
+    /// <exception cref="ParseException">
+    /// The account form or update response could not be read
+    /// </exception>
+    /// <exception cref="HttpRequestException">
+    /// An HTTP request could not be completed
+    /// </exception>
+    /// <exception cref="OperationCanceledException">
+    /// The operation was canceled
+    /// </exception>
+    public async Task<AccountUpdateResult> ChangePasswordAsync(
+        string currentPassword,
+        string newPassword,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(currentPassword);
+        ArgumentException.ThrowIfNullOrWhiteSpace(newPassword);
+        if (newPassword.Length < 8)
+        {
+            throw new ArgumentException(
+                "The new password must contain at least eight characters.",
+                nameof(newPassword));
+        }
+
+        var form = await LoadUpdateFormAsync(
+            "/settings/security/",
+            cancellationToken).ConfigureAwait(false);
+        var html = await _transport.PostFormAsync(
+            form.Action,
+            new Dictionary<string, string>
+            {
+                ["altpass"] = currentPassword,
+                ["password1"] = newPassword,
+                ["password2"] = newPassword,
+                ["submit"] = "Save",
+                ["dosection"] = "security",
+                ["doaction"] = "save_security",
+                ["username_id"] = form.UserId.ToString(CultureInfo.InvariantCulture),
+                ["dle_allow_hash"] = form.SecurityToken
+            },
+            cancellationToken,
+            form.Action).ConfigureAwait(false);
+        return await AccountParser.ParseUpdateResponseAsync(html, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Uploads an image and sets a square avatar for the current authenticated account
+    /// </summary>
+    /// <param name="image">
+    /// Readable stream containing a supported image at least 60 by 60 pixels in size
+    /// </param>
+    /// <param name="fileName">
+    /// File name with an image extension used for multipart upload
+    /// </param>
+    /// <param name="crop">
+    /// Square crop in original image pixels, or <see langword="null"/> to use the largest centered square
+    /// </param>
+    /// <param name="cancellationToken">
+    /// Token used to cancel settings loading, image upload, and crop submission
+    /// </param>
+    /// <returns>
+    /// Generated avatar URL, source dimensions, and the applied crop
+    /// </returns>
+    /// <exception cref="ArgumentNullException">
+    /// <paramref name="image"/> is <see langword="null"/>
+    /// </exception>
+    /// <exception cref="ArgumentException">
+    /// <paramref name="image"/> is unreadable or empty, or <paramref name="fileName"/> is empty
+    /// </exception>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// <paramref name="crop"/> is outside the source image or is too small for the website editor
+    /// </exception>
+    /// <exception cref="LoginRequiredException">
+    /// The website returned its login page
+    /// </exception>
+    /// <exception cref="CaptchaException">
+    /// The website requested captcha verification
+    /// </exception>
+    /// <exception cref="AccountUpdateException">
+    /// The website rejected the image format, dimensions, upload, or crop
+    /// </exception>
+    /// <exception cref="HttpException">
+    /// The website returned an unsuccessful HTTP status
+    /// </exception>
+    /// <exception cref="ParseException">
+    /// The account form or avatar response could not be read
+    /// </exception>
+    /// <exception cref="System.Text.Json.JsonException">
+    /// An avatar endpoint returned malformed JSON
+    /// </exception>
+    /// <exception cref="IOException">
+    /// The source image stream could not be read
+    /// </exception>
+    /// <exception cref="HttpRequestException">
+    /// An HTTP request could not be completed
+    /// </exception>
+    /// <exception cref="OperationCanceledException">
+    /// The operation was canceled
+    /// </exception>
+    public async Task<AvatarUpdateResult> SetAvatarAsync(
+        Stream image,
+        string fileName,
+        AvatarCrop? crop = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(image);
+        ArgumentException.ThrowIfNullOrWhiteSpace(fileName);
+        if (!image.CanRead)
+        {
+            throw new ArgumentException("The avatar stream must be readable.", nameof(image));
+        }
+
+        using var buffer = new MemoryStream();
+        await image.CopyToAsync(buffer, cancellationToken).ConfigureAwait(false);
+        if (buffer.Length == 0)
+        {
+            throw new ArgumentException("The avatar stream is empty.", nameof(image));
+        }
+
+        var form = await LoadUpdateFormAsync("/settings/", cancellationToken)
+            .ConfigureAwait(false);
+        var uploadUri = new Uri(
+            _origin,
+            $"/engine/ajax/upload_avatar.php?user_id={form.UserId.ToString(CultureInfo.InvariantCulture)}&method=put");
+        var upload = await _transport.PostMultipartJsonAsync<AvatarUploadResponse>(
+            uploadUri,
+            new Dictionary<string, string>(),
+            "image",
+            buffer.ToArray(),
+            fileName,
+            GetImageContentType(fileName),
+            cancellationToken,
+            form.Action).ConfigureAwait(false);
+        ThrowForRejectedAvatar(upload.Success, upload.Message, "The website rejected the avatar upload.");
+        if (string.IsNullOrWhiteSpace(upload.Url) ||
+            upload.ImageOriginalWidth < 1 ||
+            upload.ImageOriginalHeight < 1)
+        {
+            throw new ParseException("The avatar upload response has no image data.");
+        }
+
+        var resolvedCrop = ResolveCrop(
+            crop,
+            upload.ImageOriginalWidth,
+            upload.ImageOriginalHeight);
+        var cropData = CreateCropData(
+            upload.Url,
+            upload.ImageOriginalWidth,
+            upload.ImageOriginalHeight,
+            resolvedCrop);
+        var cropResponse = await _transport.PostFormJsonAsync<AvatarCropResponse>(
+            new Uri(
+                _origin,
+                $"/engine/ajax/upload_avatar.php?user_id={form.UserId.ToString(CultureInfo.InvariantCulture)}&method=post"),
+            cropData,
+            cancellationToken,
+            form.Action).ConfigureAwait(false);
+        ThrowForRejectedAvatar(
+            cropResponse.Success,
+            cropResponse.Message,
+            "The website rejected the avatar crop.");
+        if (string.IsNullOrWhiteSpace(cropResponse.Small))
+        {
+            throw new ParseException("The avatar crop response has no generated image URL.");
+        }
+
+        return new AvatarUpdateResult(
+            new Uri(_origin, cropResponse.Small),
+            upload.ImageOriginalWidth,
+            upload.ImageOriginalHeight,
+            resolvedCrop);
+    }
+
+    /// <summary>
+    /// Removes the current avatar from the authenticated account
+    /// </summary>
+    /// <param name="cancellationToken">
+    /// Token used to cancel settings loading and avatar removal
+    /// </param>
+    /// <returns>
+    /// Confirmation information returned by the website
+    /// </returns>
+    /// <exception cref="LoginRequiredException">
+    /// The website returned its login page
+    /// </exception>
+    /// <exception cref="CaptchaException">
+    /// The website requested captcha verification
+    /// </exception>
+    /// <exception cref="AccountUpdateException">
+    /// The website rejected the avatar removal
+    /// </exception>
+    /// <exception cref="HttpException">
+    /// The website returned an unsuccessful HTTP status
+    /// </exception>
+    /// <exception cref="ParseException">
+    /// The account form or update response could not be read
+    /// </exception>
+    /// <exception cref="HttpRequestException">
+    /// An HTTP request could not be completed
+    /// </exception>
+    /// <exception cref="OperationCanceledException">
+    /// The operation was canceled
+    /// </exception>
+    public async Task<AccountUpdateResult> RemoveAvatarAsync(
+        CancellationToken cancellationToken = default)
+    {
+        var form = await LoadUpdateFormAsync("/settings/", cancellationToken)
+            .ConfigureAwait(false);
+        var html = await _transport.PostFormAsync(
+            form.Action,
+            new Dictionary<string, string>
+            {
+                ["email"] = form.Email,
+                ["gender"] = form.Gender,
+                ["del_foto"] = "yes",
+                ["submit"] = "Save",
+                ["dosection"] = "general",
+                ["doaction"] = "save_general",
+                ["username_id"] = form.UserId.ToString(CultureInfo.InvariantCulture),
+                ["dle_allow_hash"] = form.SecurityToken
+            },
+            cancellationToken,
+            form.Action).ConfigureAwait(false);
+        return await AccountParser.ParseUpdateResponseAsync(html, cancellationToken)
+            .ConfigureAwait(false);
     }
 
     /// <summary>
@@ -624,4 +881,108 @@ public sealed class AccountClient
         [property: JsonPropertyName("message")] string? Message,
         [property: JsonPropertyName("id")] JsonElement Id,
         [property: JsonPropertyName("name")] string? Name);
+
+    private async Task<AccountFormSnapshot> LoadUpdateFormAsync(
+        string path,
+        CancellationToken cancellationToken)
+    {
+        var html = await _transport.GetStringAsync(
+            new Uri(_origin, path),
+            cancellationToken: cancellationToken).ConfigureAwait(false);
+        return await AccountParser.ParseUpdateFormAsync(
+            html,
+            _origin,
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    private static AvatarCrop ResolveCrop(
+        AvatarCrop? crop,
+        int imageWidth,
+        int imageHeight)
+    {
+        var result = crop ?? new AvatarCrop(
+            Math.Max(0, (imageWidth - imageHeight) / 2),
+            Math.Max(0, (imageHeight - imageWidth) / 2),
+            Math.Min(imageWidth, imageHeight));
+        if (result.X < 0 ||
+            result.Y < 0 ||
+            result.Size < 1 ||
+            result.X + result.Size > imageWidth ||
+            result.Y + result.Size > imageHeight)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(crop),
+                "The avatar crop must fit inside the source image.");
+        }
+
+        var scale = Math.Min(1d, 525d / imageWidth);
+        if (result.Size * scale < 60d)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(crop),
+                "The avatar crop must be at least 60 pixels in the website editor.");
+        }
+
+        return result;
+    }
+
+    private static Dictionary<string, string> CreateCropData(
+        string temporaryFile,
+        int imageWidth,
+        int imageHeight,
+        AvatarCrop crop)
+    {
+        var scale = Math.Min(1d, 525d / imageWidth);
+        var scaledWidth = imageWidth * scale;
+        var scaledHeight = imageHeight * scale;
+        var scaledCropSize = crop.Size * scale;
+        return new Dictionary<string, string>
+        {
+            ["x1"] = Round(crop.X * scale),
+            ["y1"] = Round(crop.Y * scale),
+            ["width"] = ((int)scaledWidth).ToString(CultureInfo.InvariantCulture),
+            ["height"] = ((int)scaledHeight).ToString(CultureInfo.InvariantCulture),
+            ["twidth_small"] = Round(60d / scaledCropSize * scaledWidth),
+            ["theight_small"] = Round(60d / scaledCropSize * scaledHeight),
+            ["tempfile"] = temporaryFile
+        };
+    }
+
+    private static string Round(double value) =>
+        ((int)Math.Round(value, MidpointRounding.AwayFromZero))
+            .ToString(CultureInfo.InvariantCulture);
+
+    private static string GetImageContentType(string fileName) =>
+        Path.GetExtension(fileName).ToLowerInvariant() switch
+        {
+            ".jpg" or ".jpeg" => "image/jpeg",
+            ".png" => "image/png",
+            ".gif" => "image/gif",
+            ".webp" => "image/webp",
+            _ => "application/octet-stream"
+        };
+
+    private static void ThrowForRejectedAvatar(
+        bool success,
+        string? message,
+        string fallbackMessage)
+    {
+        if (!success)
+        {
+            throw new AccountUpdateException(
+                string.IsNullOrWhiteSpace(message) ? fallbackMessage : message.Trim());
+        }
+    }
+
+    private sealed record AvatarUploadResponse(
+        bool Success,
+        string? Message,
+        string? Url,
+        int ImageOriginalWidth,
+        int ImageOriginalHeight);
+
+    private sealed record AvatarCropResponse(
+        bool Success,
+        string? Message,
+        string? Small);
 }

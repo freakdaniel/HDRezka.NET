@@ -29,6 +29,12 @@ a browser process
 | Continue watched state | `POST /engine/ajax/cdn_saves_view.php` | JSON |
 | Continue removal | `POST /engine/ajax/cdn_saves_remove.php` | JSON |
 | Bookmark changes | `POST /ajax/favorites/` | JSON |
+| Create comment or reply | `POST /ajax/add_comment/` | JSON containing rendered comment HTML or validation messages |
+| Delete own comment | `GET /engine/ajax/deletecomments.php` | JSON |
+| Submit internal rating | `GET /engine/ajax/rating.php` | JSON with updated aggregate rating |
+| Password and avatar settings | `GET /settings/` and `GET /settings/security/` | HTML forms with a security token |
+| Save password or remove avatar | `POST /user/{id}/` or `POST /user/{id}/security/` | HTML confirmation or validation errors |
+| Upload and crop avatar | `POST /engine/ajax/upload_avatar.php` | JSON from separate temporary upload and crop requests |
 
 The player endpoint name contains `series`, but the website itself uses it for
 both series and films with different `action` values
@@ -89,8 +95,16 @@ and calls the website toggle only when the requested state differs
 intentionally named as a toggle because the same `add_post` action handles both
 states
 
-Ratings, watched episode schedule state, comment creation, and comment likes
-remain unexposed until they receive their own validated contracts and tests
+The library exposes password changes, avatar upload and removal, internal
+ratings, comment creation, replies, and deletion as explicit methods. They are
+never called while loading profile, media, or comment data.
+
+The website exposes deletion controls for comments owned by the authenticated
+account. Its current interface and JavaScript do not expose comment editing,
+so the library does not implement an artificial delete-and-repost operation.
+
+Watched episode schedule state and comment likes remain unexposed account
+mutations. They need their own public contracts and tests before being added.
 
 ## Performance model
 
