@@ -28,3 +28,9 @@ dotnet_style_namespace_match_folder = false
 
 [src/HDRezka.NET/Comments/*.cs]
 dotnet_style_namespace_match_folder = false
+
+[src/HDRezka.NET/People/*.cs]
+dotnet_style_namespace_match_folder = false
+
+[src/HDRezka.NET/Franchises/*.cs]
+dotnet_style_namespace_match_folder = false

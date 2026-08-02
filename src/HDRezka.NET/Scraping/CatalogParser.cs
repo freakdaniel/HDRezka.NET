@@ -1,9 +1,10 @@
 using System.Globalization;
+using System.Text.RegularExpressions;
 using AngleSharp.Dom;
 
 namespace HdRezka.Scraping;
 
-internal static class CatalogParser
+internal static partial class CatalogParser
 {
     public static async Task<PageResult<CatalogItem>> ParsePageAsync(
         string html,
@@ -56,6 +57,24 @@ internal static class CatalogParser
         var category = DetectCategory(
             item.QuerySelector(".b-content__inline_item-cover .cat")?.ClassList,
             url);
+        var detailParts = details
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        IReadOnlyList<int> years = detailParts.Length == 0
+            ? []
+            : YearRegex()
+                .Matches(detailParts[0])
+                .Select(match => int.Parse(match.Value, CultureInfo.InvariantCulture))
+                .Distinct()
+                .ToList();
+        IReadOnlyList<string> countries = detailParts.Length > 1 ? [detailParts[1]] : [];
+        IReadOnlyList<string> genres = detailParts.Length > 2 ? detailParts[2..] : [];
+        var rating = double.TryParse(
+            item.QuerySelector(".b-category-bestrating")?.TextContent.Trim(' ', '(', ')'),
+            NumberStyles.Float,
+            CultureInfo.InvariantCulture,
+            out var parsedRating)
+                ? parsedRating
+                : (double?)null;
         return new CatalogItem(
             id,
             title,
@@ -63,7 +82,14 @@ internal static class CatalogParser
             imageUrl,
             category,
             details,
-            string.IsNullOrWhiteSpace(information) ? null : information);
+            string.IsNullOrWhiteSpace(information) ? null : information)
+        {
+            Rating = rating,
+            Years = years,
+            Countries = countries,
+            Genres = genres,
+            HasTrailer = item.QuerySelector(".show-trailer") is not null
+        };
     }
 
     public static int ParseTotalPages(IDocument document)
@@ -129,4 +155,7 @@ internal static class CatalogParser
 
         return new Uri(origin, value);
     }
+
+    [GeneratedRegex(@"\b(?:18|19|20)\d{2}\b")]
+    private static partial Regex YearRegex();
 }

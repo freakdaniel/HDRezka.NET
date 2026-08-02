@@ -109,6 +109,20 @@ public sealed class RatingException : ApiException
 }
 
 /// <summary>
+/// Indicates that the website rejected or could not provide a requested trailer
+/// </summary>
+public sealed class TrailerException : ApiException
+{
+    /// <summary>
+    /// Creates a trailer failure with the reason returned or detected by the client
+    /// </summary>
+    /// <param name="message">
+    /// Text explaining why the trailer could not be loaded
+    /// </param>
+    public TrailerException(string message) : base(message) { }
+}
+
+/// <summary>
 /// Identifies the Premium-protected resource requested by the caller
 /// </summary>
 public enum PremiumFeature

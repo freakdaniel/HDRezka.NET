@@ -112,6 +112,22 @@ public sealed class Client : IDisposable
     public CollectionClient Collections => new(_transport, RequireOrigin("collections"));
 
     /// <summary>
+    /// Gets franchise directory and ordered part operations
+    /// </summary>
+    /// <exception cref="InvalidOperationException">
+    /// The client was created without an origin
+    /// </exception>
+    public FranchiseClient Franchises => new(_transport, RequireOrigin("franchises"));
+
+    /// <summary>
+    /// Gets complete person metadata and filmography operations
+    /// </summary>
+    /// <exception cref="InvalidOperationException">
+    /// The client was created without an origin
+    /// </exception>
+    public PersonClient People => new(_transport, RequireOrigin("people"));
+
+    /// <summary>
     /// Signs in with website credentials and keeps the returned cookies for subsequent requests
     /// </summary>
     /// <param name="email">

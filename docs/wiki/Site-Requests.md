@@ -31,8 +31,14 @@ a browser process
 | Bookmark changes | `POST /ajax/favorites/` | JSON |
 | Create comment or reply | `POST /ajax/add_comment/` | JSON containing rendered comment HTML or validation messages |
 | Delete own comment | `GET /engine/ajax/deletecomments.php` | JSON |
+| Toggle comment like | `GET /engine/ajax/comments_like.php` | JSON with resulting state and count |
+| Comment like users | `POST /ajax/comments_likes/` | JSON containing an HTML fragment |
+| Report comment | `POST /engine/ajax/complaint.php` | JSON |
 | Submit internal rating | `GET /engine/ajax/rating.php` | JSON with updated aggregate rating |
+| Trailer | `POST /engine/ajax/gettrailervideo.php` | JSON with embed markup and metadata |
+| Schedule watched state | `POST /engine/ajax/schedule_watched.php` | JSON |
 | Password and avatar settings | `GET /settings/` and `GET /settings/security/` | HTML forms with a security token |
+| General and playback settings | `POST /user/{id}/` and `POST /user/{id}/personality/` | HTML confirmation or validation errors |
 | Save password or remove avatar | `POST /user/{id}/` or `POST /user/{id}/security/` | HTML confirmation or validation errors |
 | Upload and crop avatar | `POST /engine/ajax/upload_avatar.php` | JSON from separate temporary upload and crop requests |
 
@@ -52,23 +58,26 @@ the token and provide an accurate `Media.AccountTier`
 - bookmark folders
 - catalog sections and dedicated directories
 - collections
+- franchises
+- person biography and filmography
+- Premium offers and payment history
 - full search results
 
 Extended media metadata, recommendations, and series schedules are parsed from
 the already downloaded media page and do not create extra requests
 
-## Discovered read-only sources not yet exposed
+## Optional read-only sources not exposed
 
 These sources can be added when their data is needed:
 
-- `/ajax/person_info/` and `/person/{id}-{name}/` for person biography and
-  filmography
-- `/engine/ajax/gettrailervideo.php` for trailer metadata and embed code
-- `/ajax/comments_likes/` for users who liked a comment
 - `/engine/ajax/quick_content.php` for hover-card details
 - `/engine/ajax/get_newest_slider_content.php` for the compact home-page slider
 - the home-page hot episode update list
-- country, year, genre, and best-rating directory pages
+
+Country, year, genre, and best-rating pages are available through
+`CatalogClient.GetDirectoryAsync`. The structured `CatalogQuery` covers the
+normal category, genre, year, and best-rating path shape, while the relative
+path overload covers compatible mirror-specific directories
 
 Quick-content and slider endpoints duplicate data already returned by catalog
 or media pages. Calling them for every card would create an N+1 request pattern,
@@ -103,8 +112,9 @@ The website exposes deletion controls for comments owned by the authenticated
 account. Its current interface and JavaScript do not expose comment editing,
 so the library does not implement an artificial delete-and-repost operation.
 
-Watched episode schedule state and comment likes remain unexposed account
-mutations. They need their own public contracts and tests before being added.
+Watched schedule state, comment likes, comment reports, profile settings,
+playback preferences, and bulk bookmark operations are explicit mutations.
+They never run while loading a page
 
 ## Performance model
 

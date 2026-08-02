@@ -40,7 +40,26 @@ internal static partial class AccountParser
             avatar,
             AccountTokenParser.Parse(document),
             continueCount,
-            new Uri(origin, $"/user/{id}/"));
+            new Uri(origin, $"/user/{id}/"))
+        {
+            Gender = ParseGender(document.QuerySelector("select[name=\"gender\"]")?.GetAttribute("value") ??
+                document.QuerySelector("select[name=\"gender\"] option[selected]")?.GetAttribute("value"))
+        };
+    }
+
+    public static async Task<PlaybackPreferences> ParsePreferencesAsync(
+        string html,
+        CancellationToken cancellationToken)
+    {
+        var document = await Parsing.ParseDocumentAsync(html, cancellationToken)
+            .ConfigureAwait(false);
+        Parsing.ThrowForChallengePage(document);
+        var form = document.QuerySelector("form#userinfo") ??
+            throw new ParseException("The personality settings page has no update form.");
+        return new PlaybackPreferences(
+            IsChecked(form, "ctrl_links"),
+            IsChecked(form, "cdn_autoswitch"),
+            IsChecked(form, "cdn_first_episode"));
     }
 
     public static async Task<IReadOnlyList<ContinueWatchingEntry>> ParseContinueWatchingAsync(
@@ -245,8 +264,18 @@ internal static partial class AccountParser
             NumberStyles.Integer,
             CultureInfo.InvariantCulture,
             out var result)
-            ? result
-            : throw new ParseException($"Could not parse the {description}.");
+                ? result
+                : throw new ParseException($"Could not parse the {description}.");
+
+    private static AccountGender ParseGender(string? value) => value switch
+    {
+        "1" => AccountGender.Male,
+        "2" => AccountGender.Female,
+        _ => AccountGender.Unspecified
+    };
+
+    private static bool IsChecked(IElement form, string name) =>
+        form.QuerySelector($"input[name=\"{name}\"][checked]") is not null;
 
     private static long ParseRequiredLong(string? value, string description) =>
         long.TryParse(

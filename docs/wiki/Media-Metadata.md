@@ -150,6 +150,46 @@ foreach (var part in media.OtherParts)
 }
 ```
 
+Load linked pages as complete media objects with bounded concurrency:
+
+```csharp
+var parts = await media.GetOtherPartsAsync(cancellationToken);
+foreach (var part in parts)
+{
+    using (part)
+    {
+        Console.WriteLine(part.Name);
+    }
+}
+```
+
+## Person pages
+
+```csharp
+var reference = media.Details.Cast[0];
+var person = await client.People.GetAsync(reference, cancellationToken);
+
+Console.WriteLine(person.OriginalName);
+Console.WriteLine(person.BirthDateLabel);
+foreach (var career in person.Careers)
+{
+    Console.WriteLine($"{career.Name}: {career.Summary}");
+}
+```
+
+## Trailers and schedule state
+
+```csharp
+var trailer = await media.GetTrailerAsync(cancellationToken);
+Console.WriteLine(trailer.SourceUrl);
+
+var scheduleEntry = media.Details.Schedule[0];
+var watched = await media.SetScheduleWatchedAsync(
+    scheduleEntry,
+    isWatched: true,
+    cancellationToken);
+```
+
 ## Account state attached to media
 
 `media.AccountTier` and `media.IsPremiumAccount` describe the session used
@@ -176,7 +216,18 @@ await media.Comments.DeleteAsync(reply.Id, cancellationToken);
 `CommentPage` contains nested comments in website order, current and total page
 numbers, and the latest update identifier. Each comment exposes its parent
 identifier, nesting depth, author, avatar, date label, text, like count, and
-permalink
+permalink. It also exposes the author profile, formatted HTML, current-account
+like state, and available deletion or report controls
+
+```csharp
+var like = await media.Comments.ToggleLikeAsync(comment.Id, cancellationToken);
+var users = await media.Comments.GetLikeUsersAsync(comment.Id, cancellationToken);
+await media.Comments.ReportAsync(
+    comment.Id,
+    issueId: 2,
+    description: "Spam links",
+    cancellationToken);
+```
 
 Creation, replies, and deletion require an authenticated account and can be
 rejected by moderation, captcha, ownership checks, or comment rules. The live

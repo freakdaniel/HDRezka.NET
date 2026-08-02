@@ -282,6 +282,174 @@ public sealed class Media : IDisposable
     public IReadOnlyList<RelatedPart> OtherParts { get; }
 
     /// <summary>
+    /// Loads complete media objects for every related part using the shared HTTP transport
+    /// </summary>
+    /// <param name="cancellationToken">
+    /// Token used to cancel related page loading and parsing
+    /// </param>
+    /// <returns>
+    /// Loaded media objects in the same order as <see cref="OtherParts"/>
+    /// </returns>
+    /// <remarks>
+    /// The returned objects share this instance's transport and should be disposed after use. Loading is limited by <see cref="ClientOptions.MaxConcurrentRequests"/>
+    /// </remarks>
+    /// <exception cref="LoginRequiredException">
+    /// The website returned its login page
+    /// </exception>
+    /// <exception cref="CaptchaException">
+    /// The website requested captcha verification
+    /// </exception>
+    /// <exception cref="HttpException">
+    /// A related media page returned an unsuccessful HTTP status
+    /// </exception>
+    /// <exception cref="ParseException">
+    /// Required related media data could not be read
+    /// </exception>
+    /// <exception cref="HttpRequestException">
+    /// A related media request could not be completed
+    /// </exception>
+    /// <exception cref="OperationCanceledException">
+    /// The operation was canceled
+    /// </exception>
+    public async Task<IReadOnlyList<Media>> GetOtherPartsAsync(
+        CancellationToken cancellationToken = default) =>
+        await AsyncUtilities.SelectAsync(
+            OtherParts,
+            _transport.Options.MaxConcurrentRequests,
+            (part, token) => Media.LoadAsync(
+                _transport,
+                ownsTransport: false,
+                part.Url,
+                token),
+            cancellationToken).ConfigureAwait(false);
+
+    /// <summary>
+    /// Loads trailer metadata through the website trailer endpoint
+    /// </summary>
+    /// <param name="cancellationToken">
+    /// Token used to cancel trailer loading and embed parsing
+    /// </param>
+    /// <returns>
+    /// Trailer title, description, player markup, and resolved URLs
+    /// </returns>
+    /// <exception cref="TrailerException">
+    /// The media has no trailer or the website rejected the request
+    /// </exception>
+    /// <exception cref="HttpException">
+    /// The website returned an unsuccessful HTTP status
+    /// </exception>
+    /// <exception cref="ParseException">
+    /// The trailer response or player markup could not be read
+    /// </exception>
+    /// <exception cref="System.Text.Json.JsonException">
+    /// The trailer endpoint returned malformed JSON
+    /// </exception>
+    /// <exception cref="HttpRequestException">
+    /// The HTTP request could not be completed
+    /// </exception>
+    /// <exception cref="OperationCanceledException">
+    /// The operation was canceled
+    /// </exception>
+    public async Task<Trailer> GetTrailerAsync(
+        CancellationToken cancellationToken = default)
+    {
+        var response = await _transport.PostFormJsonAsync<TrailerResponse>(
+            new Uri(Origin, "/engine/ajax/gettrailervideo.php"),
+            new Dictionary<string, string>
+            {
+                ["id"] = Id.ToString(CultureInfo.InvariantCulture)
+            },
+            cancellationToken,
+            Url).ConfigureAwait(false);
+        if (!response.Success)
+        {
+            throw new TrailerException(
+                GetString(response.Message) ?? "The website did not provide a trailer.");
+        }
+
+        var embedHtml = response.Code ?? "";
+        if (string.IsNullOrWhiteSpace(embedHtml))
+        {
+            throw new ParseException("The trailer response has no player markup.");
+        }
+
+        var document = await Parsing.ParseDocumentAsync(embedHtml, cancellationToken)
+            .ConfigureAwait(false);
+        var sourceValue = document.QuerySelector("iframe, video, source")?.GetAttribute("src");
+        return new Trailer(
+            response.Title?.Trim() ?? "",
+            response.Description?.Trim() ?? "",
+            embedHtml,
+            string.IsNullOrWhiteSpace(sourceValue) ? null : new Uri(Origin, sourceValue),
+            string.IsNullOrWhiteSpace(response.Link) ? null : new Uri(Origin, response.Link));
+    }
+
+    /// <summary>
+    /// Changes the watched state of one release-schedule episode when needed
+    /// </summary>
+    /// <param name="entry">
+    /// Schedule entry loaded from <see cref="MediaDetails.Schedule"/>
+    /// </param>
+    /// <param name="isWatched">
+    /// Desired watched state
+    /// </param>
+    /// <param name="cancellationToken">
+    /// Token used to cancel the toggle request
+    /// </param>
+    /// <returns>
+    /// Updated immutable schedule entry
+    /// </returns>
+    /// <exception cref="ArgumentNullException">
+    /// <paramref name="entry"/> is <see langword="null"/>
+    /// </exception>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// The schedule identifier is not positive
+    /// </exception>
+    /// <exception cref="AccountOperationException">
+    /// Authentication is missing or the website rejected the change
+    /// </exception>
+    /// <exception cref="HttpException">
+    /// The website returned an unsuccessful HTTP status
+    /// </exception>
+    /// <exception cref="ParseException">
+    /// The response status could not be read
+    /// </exception>
+    /// <exception cref="HttpRequestException">
+    /// The HTTP request could not be completed
+    /// </exception>
+    /// <exception cref="OperationCanceledException">
+    /// The operation was canceled
+    /// </exception>
+    public async Task<EpisodeScheduleEntry> SetScheduleWatchedAsync(
+        EpisodeScheduleEntry entry,
+        bool isWatched,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(entry);
+        ArgumentOutOfRangeException.ThrowIfLessThan(entry.Id, 1);
+        if (entry.IsWatched == isWatched)
+        {
+            return entry;
+        }
+
+        var response = await _transport.PostFormJsonAsync<MutationResponse>(
+            new Uri(Origin, "/engine/ajax/schedule_watched.php"),
+            new Dictionary<string, string>
+            {
+                ["id"] = entry.Id.ToString(CultureInfo.InvariantCulture)
+            },
+            cancellationToken,
+            Url).ConfigureAwait(false);
+        if (!response.Success)
+        {
+            throw new AccountOperationException(
+                GetString(response.Message) ?? "The schedule watched state could not be changed.");
+        }
+
+        return entry with { IsWatched = isWatched };
+    }
+
+    /// <summary>
     /// Gets the mutable translator priority list used when no translation is selected explicitly
     /// </summary>
     public IList<int> PreferredTranslators => _transport.Options.PreferredTranslators;
@@ -1452,6 +1620,18 @@ public sealed class Media : IDisposable
         bool Success,
         JsonElement Num,
         JsonElement Votes,
+        JsonElement Message);
+
+    private sealed record TrailerResponse(
+        bool Success,
+        string? Title,
+        string? Description,
+        string? Code,
+        string? Link,
+        JsonElement Message);
+
+    private sealed record MutationResponse(
+        bool Success,
         JsonElement Message);
 
     private readonly record struct TranslatorKey(

@@ -9,7 +9,7 @@ namespace HdRezka;
 /// <summary>
 /// Loads and changes profile data, saved viewing positions, and user bookmarks
 /// </summary>
-public sealed class AccountClient
+public sealed partial class AccountClient
 {
     private readonly HttpTransport _transport;
     private readonly Uri _origin;
@@ -552,25 +552,9 @@ public sealed class AccountClient
     /// </exception>
     public async Task<IReadOnlyList<BookmarkFolder>> GetBookmarksAsync(
         CancellationToken cancellationToken = default)
-    {
-        var html = await _transport.GetStringAsync(
-            new Uri(_origin, "/favorites/"),
-            cancellationToken: cancellationToken).ConfigureAwait(false);
-        var root = await AccountParser.ParseBookmarksAsync(
-            html,
-            _origin,
+        => await GetBookmarksAsync(
+            new BookmarkQuery(),
             cancellationToken).ConfigureAwait(false);
-        if (root.Folders.Count == 0)
-        {
-            return [];
-        }
-
-        return await AsyncUtilities.SelectAsync(
-            root.Folders,
-            _transport.Options.MaxConcurrentRequests,
-            (folder, token) => LoadBookmarkFolderAsync(folder, root, token),
-            cancellationToken).ConfigureAwait(false);
-    }
 
     /// <summary>
     /// Creates a bookmark folder for the authenticated account
@@ -880,7 +864,9 @@ public sealed class AccountClient
         [property: JsonPropertyName("success")] JsonElement Success,
         [property: JsonPropertyName("message")] string? Message,
         [property: JsonPropertyName("id")] JsonElement Id,
-        [property: JsonPropertyName("name")] string? Name);
+        [property: JsonPropertyName("name")] string? Name,
+        [property: JsonPropertyName("moved")] JsonElement Moved,
+        [property: JsonPropertyName("added")] JsonElement Added);
 
     private async Task<AccountFormSnapshot> LoadUpdateFormAsync(
         string path,

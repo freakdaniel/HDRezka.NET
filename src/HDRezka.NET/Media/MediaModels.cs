@@ -123,3 +123,28 @@ public sealed record Translator(int Id, string Name, bool IsPremium)
 /// Absolute URL of the related part
 /// </param>
 public sealed record RelatedPart(string Title, Uri Url);
+
+/// <summary>
+/// Describes trailer metadata returned by the website
+/// </summary>
+/// <param name="Title">
+/// Trailer title, or an empty string when the website does not provide one
+/// </param>
+/// <param name="Description">
+/// Trailer description, or an empty string when the website does not provide one
+/// </param>
+/// <param name="EmbedHtml">
+/// Raw player markup returned by the trailer endpoint
+/// </param>
+/// <param name="SourceUrl">
+/// Direct iframe, video, or source URL parsed from <paramref name="EmbedHtml"/>, or <see langword="null"/> when the markup uses inline script
+/// </param>
+/// <param name="MediaUrl">
+/// Absolute link back to the full media page, or <see langword="null"/> when unavailable
+/// </param>
+public sealed record Trailer(
+    string Title,
+    string Description,
+    string EmbedHtml,
+    Uri? SourceUrl,
+    Uri? MediaUrl);

@@ -47,6 +47,25 @@ supports films, series, cartoons, and anime. Shows are available through
 `GetShowsAsync`. An unsupported category or a page
 number below one causes `ArgumentOutOfRangeException`.
 
+## Genre, year, country, and best-rating directories
+
+```csharp
+var comedies = await client.Catalog.GetDirectoryAsync(
+    new CatalogQuery(
+        MediaCategory.Film,
+        Genre: "comedy",
+        Year: 2025,
+        Best: true),
+    page: 2);
+
+var usa = await client.Catalog.GetDirectoryAsync(
+    "/films/country/usa/",
+    page: 1);
+```
+
+`CatalogItem` keeps the original `Details` text and also exposes parsed
+`Years`, `Countries`, `Genres`, internal `Rating`, and `HasTrailer`.
+
 ## Collection directory
 
 ```csharp
@@ -82,6 +101,22 @@ var collection = await client.Collections.GetAsync(
 media cards, current page, and detected total page count. Collection media
 cards use `CatalogItem`, the same model returned by home-page sections and
 bookmark folders.
+
+## Franchises
+
+```csharp
+var directory = await client.Franchises.GetPageAsync(page: 1);
+var franchise = await client.Franchises.GetAsync(directory.Items[0]);
+
+foreach (var part in franchise.Parts)
+{
+    Console.WriteLine(
+        $"{part.Order}: {part.Title}, {part.Year}, {part.Rating}, {part.Url}");
+}
+```
+
+Franchise parts are sorted by their website order and include the media ID,
+year, rating, and URL when available.
 
 ## Pagination and errors
 

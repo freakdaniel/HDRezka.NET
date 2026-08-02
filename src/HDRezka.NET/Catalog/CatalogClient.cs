@@ -18,6 +18,161 @@ public sealed class CatalogClient
     }
 
     /// <summary>
+    /// Loads one page from a category, genre, year, or best-rating directory
+    /// </summary>
+    /// <param name="query">
+    /// Directory filters used to build the website path
+    /// </param>
+    /// <param name="page">
+    /// One-based page number
+    /// </param>
+    /// <param name="cancellationToken">
+    /// Token used to cancel page loading and parsing
+    /// </param>
+    /// <returns>
+    /// Media cards and pagination information for the requested directory
+    /// </returns>
+    /// <exception cref="ArgumentNullException">
+    /// <paramref name="query"/> is <see langword="null"/>
+    /// </exception>
+    /// <exception cref="ArgumentException">
+    /// The category is unsupported or the genre contains characters that cannot be used in a website slug
+    /// </exception>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// <paramref name="page"/> is less than one or the supplied year is outside the website directory range
+    /// </exception>
+    /// <exception cref="LoginRequiredException">
+    /// The website returned its login page
+    /// </exception>
+    /// <exception cref="CaptchaException">
+    /// The website requested captcha verification
+    /// </exception>
+    /// <exception cref="HttpException">
+    /// The website returned an unsuccessful HTTP status
+    /// </exception>
+    /// <exception cref="ParseException">
+    /// A catalog card or response page could not be read
+    /// </exception>
+    /// <exception cref="HttpRequestException">
+    /// The HTTP request could not be completed
+    /// </exception>
+    /// <exception cref="OperationCanceledException">
+    /// The operation was canceled
+    /// </exception>
+    public Task<PageResult<CatalogItem>> GetDirectoryAsync(
+        CatalogQuery query,
+        int page = 1,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+        ArgumentOutOfRangeException.ThrowIfLessThan(page, 1);
+        if (query.Year is < 1890 or > 2100)
+        {
+            throw new ArgumentOutOfRangeException(nameof(query), "The release year must be between 1890 and 2100.");
+        }
+
+        var category = query.Category switch
+        {
+            MediaCategory.Film => "films",
+            MediaCategory.Series => "series",
+            MediaCategory.Cartoon => "cartoons",
+            MediaCategory.Anime => "animation",
+            MediaCategory.Show => "show",
+            _ => throw new ArgumentException("The website does not expose a directory for this category.", nameof(query))
+        };
+        var genre = query.Genre?.Trim().Trim('/');
+        if (!string.IsNullOrEmpty(genre) &&
+            genre.Any(character => !(char.IsAsciiLetterOrDigit(character) || character == '-')))
+        {
+            throw new ArgumentException("The genre must be a website slug.", nameof(query));
+        }
+
+        var segments = new List<string> { category };
+        if (query.Best)
+        {
+            segments.Add("best");
+        }
+
+        if (!string.IsNullOrEmpty(genre))
+        {
+            segments.Add(genre);
+        }
+
+        if (query.Year.HasValue)
+        {
+            if (!query.Best)
+            {
+                throw new ArgumentException("Year filtering is available only for best-rating directories.", nameof(query));
+            }
+
+            segments.Add(query.Year.Value.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        }
+
+        var path = $"/{string.Join('/', segments)}/";
+        return LoadListingAsync(path, page, query: null, cancellationToken);
+    }
+
+    /// <summary>
+    /// Loads a catalog-compatible website path without requiring a predefined directory model
+    /// </summary>
+    /// <param name="path">
+    /// Relative path on the configured website such as <c>/films/country/usa/</c>
+    /// </param>
+    /// <param name="page">
+    /// One-based page number appended to the supplied path
+    /// </param>
+    /// <param name="cancellationToken">
+    /// Token used to cancel page loading and parsing
+    /// </param>
+    /// <returns>
+    /// Media cards and pagination information for the requested path
+    /// </returns>
+    /// <exception cref="ArgumentException">
+    /// <paramref name="path"/> is empty, absolute, or leaves the configured website origin
+    /// </exception>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// <paramref name="page"/> is less than one
+    /// </exception>
+    /// <exception cref="LoginRequiredException">
+    /// The website returned its login page
+    /// </exception>
+    /// <exception cref="CaptchaException">
+    /// The website requested captcha verification
+    /// </exception>
+    /// <exception cref="HttpException">
+    /// The website returned an unsuccessful HTTP status
+    /// </exception>
+    /// <exception cref="ParseException">
+    /// A catalog card or response page could not be read
+    /// </exception>
+    /// <exception cref="HttpRequestException">
+    /// The HTTP request could not be completed
+    /// </exception>
+    /// <exception cref="OperationCanceledException">
+    /// The operation was canceled
+    /// </exception>
+    public Task<PageResult<CatalogItem>> GetDirectoryAsync(
+        string path,
+        int page = 1,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
+        ArgumentOutOfRangeException.ThrowIfLessThan(page, 1);
+        if (Uri.TryCreate(path, UriKind.Absolute, out _))
+        {
+            throw new ArgumentException("The catalog path must be relative.", nameof(path));
+        }
+
+        var normalized = $"/{path.Trim('/')}/";
+        if (normalized.Contains("/../", StringComparison.Ordinal) || normalized.Contains("/./", StringComparison.Ordinal))
+        {
+            throw new ArgumentException("The catalog path cannot contain relative traversal segments.", nameof(path));
+        }
+
+        return LoadListingAsync(normalized, page, query: null, cancellationToken);
+    }
+
+    /// <summary>
     /// Loads one page from a home-page catalog section
     /// </summary>
     /// <param name="section">

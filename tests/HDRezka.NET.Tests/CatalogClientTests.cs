@@ -90,6 +90,23 @@ public sealed class CatalogClientTests
         Assert.Equal(expectedCategory, Assert.Single(result.Items).Category);
     }
 
+    [Fact]
+    public async Task GetDirectoryAsync_BuildsBestGenreYearPath()
+    {
+        using var httpClient = new HttpClient(new StubHttpHandler((request, _) =>
+        {
+            Assert.Equal("/films/best/comedy/2025/page/3/", request.RequestUri!.AbsolutePath);
+            return Task.FromResult(StubHttpHandler.Html(CatalogHtml));
+        }));
+        using var client = new Client("https://hdrezka.test", httpClient: httpClient);
+
+        var result = await client.Catalog.GetDirectoryAsync(
+            new CatalogQuery(MediaCategory.Film, "comedy", 2025, Best: true),
+            page: 3);
+
+        Assert.Single(result.Items);
+    }
+
     private const string CatalogHtml = """
         <!doctype html>
         <html>

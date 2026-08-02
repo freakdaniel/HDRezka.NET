@@ -78,6 +78,11 @@ internal static class CommentParser
         var avatarUrl = string.IsNullOrWhiteSpace(avatarValue)
             ? null
             : new Uri(origin, avatarValue);
+        var textElement = item.QuerySelector($"#comm-id-{id}") ?? item.QuerySelector(".text");
+        var authorLink = item.QuerySelector(".name a, a.name");
+        var authorUrl = string.IsNullOrWhiteSpace(authorLink?.GetAttribute("href"))
+            ? null
+            : new Uri(origin, authorLink.GetAttribute("href"));
         return new Comment(
             id,
             FindParentId(item),
@@ -87,7 +92,37 @@ internal static class CommentParser
             item.QuerySelector(".date")?.TextContent.Trim() ?? "",
             text,
             likes,
-            new UriBuilder(mediaUrl) { Fragment = $"comment{id}" }.Uri);
+            new UriBuilder(mediaUrl) { Fragment = $"comment{id}" }.Uri)
+        {
+            AuthorId = ParseAuthorId(authorUrl),
+            AuthorUrl = authorUrl,
+            Html = textElement?.InnerHtml.Trim() ?? "",
+            IsLikedByCurrentAccount = item.QuerySelector(".b-comment__like_it.disabled") is not null,
+            CanDelete = item.QuerySelector("[onclick*=\"deleteComment\"], .delete-comment") is not null,
+            CanReport = item.QuerySelector(".b-comment__report") is not null
+        };
+    }
+
+    public static async Task<IReadOnlyList<CommentLikeUser>> ParseLikeUsersAsync(
+        string html,
+        Uri origin,
+        CancellationToken cancellationToken)
+    {
+        var document = await Parsing.ParseDocumentAsync(html, cancellationToken)
+            .ConfigureAwait(false);
+        return document.QuerySelectorAll("a")
+            .Select(link =>
+            {
+                var name = link.GetAttribute("title")?.Trim() ?? link.TextContent.Trim();
+                var href = link.GetAttribute("href");
+                var image = link.QuerySelector("img")?.GetAttribute("src");
+                return new CommentLikeUser(
+                    name,
+                    string.IsNullOrWhiteSpace(href) ? null : new Uri(origin, href),
+                    string.IsNullOrWhiteSpace(image) ? null : new Uri(origin, image));
+            })
+            .Where(user => !string.IsNullOrWhiteSpace(user.Name))
+            .ToList();
     }
 
     private static long? FindParentId(IElement item)
@@ -120,4 +155,19 @@ internal static class CommentParser
             out var result)
                 ? result
                 : throw new ParseException($"Could not parse {description}.");
+
+    private static int? ParseAuthorId(Uri? url)
+    {
+        if (url is null)
+        {
+            return null;
+        }
+
+        var segments = url.AbsolutePath.Trim('/').Split('/');
+        return segments.Length >= 2 &&
+            segments[0].Equals("user", StringComparison.OrdinalIgnoreCase) &&
+            int.TryParse(segments[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out var id)
+                ? id
+                : null;
+    }
 }

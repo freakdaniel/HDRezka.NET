@@ -135,6 +135,83 @@ public sealed class MediaTests
     }
 
     [Fact]
+    public async Task GetTrailerAsync_UsesCompactEndpointAndParsesEmbedUrl()
+    {
+        var requestNumber = 0;
+        using var client = CreateClient(async (request, cancellationToken) =>
+        {
+            requestNumber++;
+            if (requestNumber == 1)
+            {
+                return StubHttpHandler.Html(MovieHtml);
+            }
+
+            Assert.Equal("/engine/ajax/gettrailervideo.php", request.RequestUri!.AbsolutePath);
+            var form = await request.Content!.ReadAsStringAsync(cancellationToken);
+            Assert.Contains("id=123", form);
+            return StubHttpHandler.Json(
+                """
+                {
+                  "success": true,
+                  "title": "Official trailer",
+                  "description": "Trailer description",
+                  "code": "<iframe src=\"https://video.test/embed/123\"></iframe>",
+                  "link": "/films/drama/123-test.html"
+                }
+                """);
+        });
+        using var media = await Media.CreateAsync(
+            "https://hdrezka.test/films/drama/123-test.html",
+            httpClient: client);
+
+        var trailer = await media.GetTrailerAsync();
+
+        Assert.Equal("Official trailer", trailer.Title);
+        Assert.Equal(new Uri("https://video.test/embed/123"), trailer.SourceUrl);
+        Assert.Equal(media.Url, trailer.MediaUrl);
+    }
+
+    [Fact]
+    public async Task SetScheduleWatchedAsync_TogglesOnlyWhenNeeded()
+    {
+        var requests = 0;
+        using var client = CreateClient(async (request, cancellationToken) =>
+        {
+            requests++;
+            if (request.Method == HttpMethod.Get)
+            {
+                return StubHttpHandler.Html(SeriesHtml.Replace(
+                    "</body>",
+                    """
+                    <table class="b-post__schedule_table"><tr>
+                      <td class="td-1" data-id="500">1 сезон 2 серия</td>
+                      <td class="td-2"><b>Episode</b></td>
+                      <td><i class="watch-episode-action"></i></td>
+                      <td class="td-4">26 мая 2026</td>
+                      <td><span class="exists-episode"></span></td>
+                    </tr></table></body>
+                    """,
+                    StringComparison.Ordinal));
+            }
+
+            Assert.Equal("/engine/ajax/schedule_watched.php", request.RequestUri!.AbsolutePath);
+            Assert.Contains("id=500", await request.Content!.ReadAsStringAsync(cancellationToken));
+            return StubHttpHandler.Json("""{"success":true}""");
+        });
+        using var media = await Media.CreateAsync(
+            "https://hdrezka.test/series/321-show.html",
+            httpClient: client);
+        var entry = Assert.Single(media.Details.Schedule);
+
+        var unchanged = await media.SetScheduleWatchedAsync(entry, false);
+        var watched = await media.SetScheduleWatchedAsync(entry, true);
+
+        Assert.Same(entry, unchanged);
+        Assert.True(watched.IsWatched);
+        Assert.Equal(2, requests);
+    }
+
+    [Fact]
     public async Task SortTranslators_AppliesPreferredAndNonPreferredLists()
     {
         using var client = CreateClient((_, _) =>

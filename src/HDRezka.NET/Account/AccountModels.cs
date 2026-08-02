@@ -1,6 +1,27 @@
 namespace HdRezka;
 
 /// <summary>
+/// Identifies the gender value supported by account settings
+/// </summary>
+public enum AccountGender
+{
+    /// <summary>
+    /// No gender is specified
+    /// </summary>
+    Unspecified = 0,
+
+    /// <summary>
+    /// Male gender
+    /// </summary>
+    Male = 1,
+
+    /// <summary>
+    /// Female gender
+    /// </summary>
+    Female = 2
+}
+
+/// <summary>
 /// Holds metadata for the account used by the current authenticated session
 /// </summary>
 /// <param name="Id">
@@ -37,7 +58,208 @@ public sealed record AccountProfile(
     /// Gets whether the account has an active Premium subscription
     /// </summary>
     public bool IsPremium => Tier == AccountTier.Premium;
+
+    /// <summary>
+    /// Gets the gender selected in account settings
+    /// </summary>
+    public AccountGender Gender { get; init; }
 }
+
+/// <summary>
+/// Describes editable general account settings
+/// </summary>
+/// <param name="Email">
+/// Account email used by the website
+/// </param>
+/// <param name="Gender">
+/// Gender value stored in account settings
+/// </param>
+public sealed record AccountSettings(string Email, AccountGender Gender);
+
+/// <summary>
+/// Describes website and player behavior saved for the account
+/// </summary>
+/// <param name="UpdateAddressOnSelection">
+/// Whether the browser address changes with translation, season, and episode selection
+/// </param>
+/// <param name="AutoSwitchEpisodes">
+/// Whether the player automatically starts the next episode
+/// </param>
+/// <param name="SelectFirstEpisode">
+/// Whether the player selects the first episode by default
+/// </param>
+public sealed record PlaybackPreferences(
+    bool UpdateAddressOnSelection,
+    bool AutoSwitchEpisodes,
+    bool SelectFirstEpisode);
+
+/// <summary>
+/// Identifies the current state of a Premium payment
+/// </summary>
+public enum PaymentStatus
+{
+    /// <summary>
+    /// The website returned an unrecognized status
+    /// </summary>
+    Unknown,
+
+    /// <summary>
+    /// Payment is still being processed
+    /// </summary>
+    Pending,
+
+    /// <summary>
+    /// Payment completed successfully
+    /// </summary>
+    Successful,
+
+    /// <summary>
+    /// Payment failed or was rejected
+    /// </summary>
+    Failed
+}
+
+/// <summary>
+/// Describes one row from Premium payment history
+/// </summary>
+/// <param name="Number">
+/// Displayed row number
+/// </param>
+/// <param name="AmountLabel">
+/// Amount and currency text shown by the website
+/// </param>
+/// <param name="Days">
+/// Number of Premium days associated with the payment
+/// </param>
+/// <param name="Status">
+/// Normalized payment status
+/// </param>
+/// <param name="StatusLabel">
+/// Original localized status text
+/// </param>
+/// <param name="DateLabel">
+/// Original localized payment date text
+/// </param>
+/// <param name="DetailsUrl">
+/// Absolute payment details URL, or <see langword="null"/> when unavailable
+/// </param>
+public sealed record PaymentHistoryEntry(
+    int Number,
+    string AmountLabel,
+    int Days,
+    PaymentStatus Status,
+    string StatusLabel,
+    string DateLabel,
+    Uri? DetailsUrl);
+
+/// <summary>
+/// Describes one payment method offered for Premium
+/// </summary>
+/// <param name="Id">
+/// Identifier sent by the payment form
+/// </param>
+/// <param name="Name">
+/// Payment method name
+/// </param>
+/// <param name="Description">
+/// Additional method description, or an empty string when unavailable
+/// </param>
+/// <param name="ImageUrl">
+/// Absolute method icon URL, or <see langword="null"/> when unavailable
+/// </param>
+public sealed record PremiumPaymentMethod(
+    string Id,
+    string Name,
+    string Description,
+    Uri? ImageUrl);
+
+/// <summary>
+/// Describes one read-only Premium plan offered for a payment method
+/// </summary>
+/// <param name="PaymentMethodId">
+/// Payment method identifier associated with the plan
+/// </param>
+/// <param name="Days">
+/// Subscription duration in days
+/// </param>
+/// <param name="Title">
+/// Human-readable duration title
+/// </param>
+/// <param name="PriceLabel">
+/// Price text shown by the website
+/// </param>
+/// <param name="MonthlyPriceLabel">
+/// Approximate monthly price text, or <see langword="null"/> when unavailable
+/// </param>
+/// <param name="DiscountLabel">
+/// Discount text, or <see langword="null"/> when unavailable
+/// </param>
+/// <param name="IsPopular">
+/// Whether the website labels this plan as the most popular
+/// </param>
+public sealed record PremiumPlan(
+    string PaymentMethodId,
+    int Days,
+    string Title,
+    string PriceLabel,
+    string? MonthlyPriceLabel,
+    string? DiscountLabel,
+    bool IsPopular);
+
+/// <summary>
+/// Holds read-only Premium payment methods and plans
+/// </summary>
+/// <param name="Methods">
+/// Available payment methods
+/// </param>
+/// <param name="Plans">
+/// Plans grouped by their payment method identifiers
+/// </param>
+public sealed record PremiumOffers(
+    IReadOnlyList<PremiumPaymentMethod> Methods,
+    IReadOnlyList<PremiumPlan> Plans);
+
+/// <summary>
+/// Identifies bookmark ordering supported by the website
+/// </summary>
+public enum BookmarkSort
+{
+    /// <summary>
+    /// Newest bookmarks first
+    /// </summary>
+    Added,
+
+    /// <summary>
+    /// Newest release year first
+    /// </summary>
+    Year,
+
+    /// <summary>
+    /// Most popular media first
+    /// </summary>
+    Popular
+}
+
+/// <summary>
+/// Describes sorting and media filtering used while loading bookmarks
+/// </summary>
+/// <param name="Sort">
+/// Bookmark ordering
+/// </param>
+/// <param name="Category">
+/// Media category to include, or <see cref="MediaCategory.Unknown"/> to include every category
+/// </param>
+public sealed record BookmarkQuery(
+    BookmarkSort Sort = BookmarkSort.Added,
+    MediaCategory Category = MediaCategory.Unknown);
+
+/// <summary>
+/// Describes a bookmark move accepted by the website
+/// </summary>
+/// <param name="Moved">
+/// Number of bookmarks reported as moved
+/// </param>
+public sealed record BookmarkMoveResult(int Moved);
 
 /// <summary>
 /// Defines a square avatar crop in pixels of the original uploaded image

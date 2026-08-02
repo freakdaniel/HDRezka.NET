@@ -22,11 +22,24 @@ Console.WriteLine(profile.AvatarUrl);
 Console.WriteLine(profile.Tier);
 Console.WriteLine(profile.IsPremium);
 Console.WriteLine(profile.ContinueWatchingCount);
+Console.WriteLine(profile.Gender);
 ```
 
 `Email` and `AvatarUrl` are nullable because a compatible mirror may omit them.
 `Tier` contains the subscription tier detected from account data, while
 `IsPremium` is a convenience property for checking `AccountTier.Premium`.
+
+```csharp
+var settings = await client.Account.GetSettingsAsync(cancellationToken);
+await client.Account.UpdateSettingsAsync(
+    settings with { Gender = AccountGender.Female },
+    cancellationToken);
+
+var preferences = await client.Account.GetPlaybackPreferencesAsync(cancellationToken);
+await client.Account.UpdatePlaybackPreferencesAsync(
+    preferences with { AutoSwitchEpisodes = false },
+    cancellationToken);
+```
 
 ## Change password
 
@@ -176,6 +189,14 @@ bookmark page and then loads the remaining user-created folders concurrently.
 Every bookmarked media card uses the same `CatalogItem` model as catalog and
 collection pages.
 
+Apply the website sort and category filter to every folder:
+
+```csharp
+var series = await client.Account.GetBookmarksAsync(
+    new BookmarkQuery(BookmarkSort.Popular, MediaCategory.Series),
+    cancellationToken);
+```
+
 Create and delete user sections through the same authenticated session
 
 ```csharp
@@ -185,6 +206,31 @@ Console.WriteLine(folder.Id);
 Console.WriteLine(folder.Name);
 
 await client.Account.DeleteBookmarkFolderAsync(folder.Id);
+```
+
+Folders can be renamed and reordered. Selected media can be removed or moved,
+and a complete folder can be merged into another one:
+
+```csharp
+folder = await client.Account.RenameBookmarkFolderAsync(
+    folder,
+    "Favorites",
+    cancellationToken);
+await client.Account.SortBookmarkFoldersAsync([folder.Id, another.Id], cancellationToken);
+await client.Account.RemoveBookmarksAsync(folder.Id, [123, 456], cancellationToken);
+await client.Account.MoveBookmarksAsync(folder.Id, another.Id, [789], cancellationToken);
+await client.Account.MoveBookmarkFolderAsync(folder.Id, another.Id, cancellationToken);
+```
+
+## Premium metadata
+
+Premium payment information is read-only and never starts checkout:
+
+```csharp
+var history = await client.Account.GetPaymentHistoryAsync(cancellationToken);
+var offers = await client.Account.GetPremiumOffersAsync(
+    currency: "eu",
+    cancellationToken);
 ```
 
 Deleting a section also deletes every bookmark stored inside it

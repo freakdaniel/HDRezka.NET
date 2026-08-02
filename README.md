@@ -119,11 +119,32 @@ var reply = await media.Comments.ReplyAsync(
     created.Id,
     "A reply to the published comment");
 await media.Comments.DeleteAsync(reply.Id);
+var like = await media.Comments.ToggleLikeAsync(comments.Items[0].Id);
+var likedBy = await media.Comments.GetLikeUsersAsync(comments.Items[0].Id);
 ```
 
 Comment creation, replies, and deletion require an authenticated account.
 The website does not expose comment editing, so the library does not emulate
 it by deleting and reposting content
+
+## Catalogs, people, franchises, and trailers
+
+```csharp
+var catalog = await session.Catalog.GetDirectoryAsync(
+    new CatalogQuery(MediaCategory.Film, "comedy", 2025, Best: true));
+
+var person = await session.People.GetAsync(media.Details.Cast[0]);
+
+var franchiseDirectory = await session.Franchises.GetPageAsync();
+var franchise = await session.Franchises.GetAsync(franchiseDirectory.Items[0]);
+
+var trailer = await media.GetTrailerAsync();
+var relatedMedia = await media.GetOtherPartsAsync();
+```
+
+Catalog cards expose structured years, countries, genres, card rating, and
+trailer availability. Person pages include biography and grouped filmography,
+while franchise parts include their order, year, rating, media ID, and URL
 
 ## Internal rating
 
