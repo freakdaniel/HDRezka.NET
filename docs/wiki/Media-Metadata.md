@@ -54,6 +54,10 @@ from the same account, which is reported as `RatingException`.
 first localized title, while `OriginalName` is the last original title or
 `null`
 
+Alternative titles are separated only by a standalone slash surrounded by
+spaces. Slashes that belong to a title, including double slashes such as in
+`.hack//Roots`, remain part of the same title
+
 `MediaFormat` describes the player shape:
 
 - `Movie`

@@ -171,13 +171,20 @@ internal sealed partial class Scraper : IScraper
                 $"Could not find the media title at \"{url}\". Page title: \"{document.Title}\".");
         }
 
-        return value.Split('/', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+        return ParseTitleVariants(value);
     }
 
     private static IReadOnlyList<string> ParseOriginalNames(IDocument document) =>
-        document.QuerySelector(".b-post__origtitle")?.TextContent
-            .Split('/', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
-        ?? [];
+        ParseTitleVariants(document.QuerySelector(".b-post__origtitle")?.TextContent);
+
+    private static IReadOnlyList<string> ParseTitleVariants(string? value) =>
+        string.IsNullOrWhiteSpace(value)
+            ? []
+            : TitleSeparatorRegex()
+                .Split(value.Trim())
+                .Where(title => !string.IsNullOrWhiteSpace(title))
+                .Select(title => title.Trim())
+                .ToList();
 
     private static int? ParseReleaseYear(IDocument document)
     {
@@ -650,6 +657,9 @@ internal sealed partial class Scraper : IScraper
 
     [GeneratedRegex(@"\s+\(\d{4}\)\s*$")]
     private static partial Regex TitleYearSuffixRegex();
+
+    [GeneratedRegex(@"\s+/\s+")]
+    private static partial Regex TitleSeparatorRegex();
 
     [GeneratedRegex(@"\D")]
     private static partial Regex NonDigitRegex();

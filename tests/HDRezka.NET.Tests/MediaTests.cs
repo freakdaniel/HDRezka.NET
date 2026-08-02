@@ -46,6 +46,31 @@ public sealed class MediaTests
     }
 
     [Fact]
+    public async Task CreateAsync_PreservesSlashesInsideTitles()
+    {
+        var html = MovieHtml
+            .Replace(
+                "Тестовый фильм / Test Film",
+                ".хак//Корни",
+                StringComparison.Ordinal)
+            .Replace(
+                "Film Original / Original Film",
+                ".hack//Roots / .hack//SIGN",
+                StringComparison.Ordinal);
+        using var client = CreateClient((_, _) =>
+            Task.FromResult(StubHttpHandler.Html(html)));
+
+        using var media = await Media.CreateAsync(
+            "https://hdrezka.test/animation/adventures/321-test.html",
+            httpClient: client);
+
+        Assert.Equal(".хак//Корни", media.Name);
+        Assert.Equal([".хак//Корни"], media.Names);
+        Assert.Equal(".hack//SIGN", media.OriginalName);
+        Assert.Equal([".hack//Roots", ".hack//SIGN"], media.OriginalNames);
+    }
+
+    [Fact]
     public async Task CreateAsync_PreservesMetadataWhenPlaybackIsTemporarilyUnavailable()
     {
         var requests = 0;
