@@ -117,7 +117,10 @@ request
 
 `media.Rating` is the aggregate rating submitted by HDRezka users. Ratings
 imported from IMDb, Kinopoisk, and other services are available separately
-through `media.Details.ExternalRatings`
+through `media.Details.ExternalRatings`. Each external rating keeps the HDRezka
+redirect in `Url`, exposes the decoded direct link in `TargetUrl`, and provides
+the IMDb or Kinopoisk title identifier in `Id` when recognized. Redirects are
+decoded locally without another request
 
 All network methods accept a `CancellationToken`
 

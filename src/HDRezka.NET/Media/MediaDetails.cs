@@ -55,7 +55,25 @@ public sealed record ExternalRating(
     string Source,
     double? Value,
     int? Votes,
-    Uri? Url);
+    Uri? Url)
+{
+    /// <summary>
+    /// Gets the direct external title URL decoded from the website redirect
+    /// </summary>
+    /// <value>
+    /// Direct external URL, or <see langword="null"/> when the link cannot be decoded
+    /// </value>
+    public Uri? TargetUrl { get; init; }
+
+    /// <summary>
+    /// Gets the title identifier used by the external service
+    /// </summary>
+    /// <value>
+    /// IMDb identifier such as <c>tt4228802</c>, Kinopoisk identifier such as
+    /// <c>891601</c>, or <see langword="null"/> when the source is unsupported or the link is invalid
+    /// </value>
+    public string? Id { get; init; }
+}
 
 /// <summary>
 /// Describes one entry from a series release schedule

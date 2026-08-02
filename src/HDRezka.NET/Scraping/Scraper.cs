@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text;
 using System.Text.RegularExpressions;
 using AngleSharp.Dom;
 using HdRezka.Abstractions;
@@ -338,17 +339,107 @@ internal sealed partial class Scraper : IScraper
                     out var parsedVotes)
                         ? parsedVotes
                         : (int?)null;
+                var redirectUrl = TryParseUri(
+                    origin,
+                    element.QuerySelector("a")?.GetAttribute("href"));
+                var targetUrl = ParseExternalTargetUrl(redirectUrl, origin);
                 return new ExternalRating(
                     source,
                     value,
                     votes,
-                    TryParseUri(
-                        origin,
-                        element.QuerySelector("a")?.GetAttribute("href")));
+                    redirectUrl)
+                {
+                    TargetUrl = targetUrl,
+                    Id = ParseExternalRatingId(targetUrl)
+                };
             })
             .Where(rating => rating is not null)
             .Cast<ExternalRating>()
             .ToList();
+
+    private static Uri? ParseExternalTargetUrl(Uri? url, Uri origin)
+    {
+        if (url is null)
+        {
+            return null;
+        }
+
+        if (!url.IdnHost.Equals(origin.IdnHost, StringComparison.OrdinalIgnoreCase))
+        {
+            return IsHttpUrl(url) ? url : null;
+        }
+
+        const string helpPrefix = "/help/";
+        if (!url.AbsolutePath.StartsWith(
+                helpPrefix,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        try
+        {
+            var encodedPayload = url.AbsolutePath[helpPrefix.Length..];
+            if (encodedPayload.EndsWith('/'))
+            {
+                encodedPayload = encodedPayload[..^1];
+            }
+
+            var payload = Uri.UnescapeDataString(encodedPayload)
+                .Replace('-', '+')
+                .Replace('_', '/');
+            var remainder = payload.Length % 4;
+            if (remainder != 0)
+            {
+                payload = payload.PadRight(payload.Length + 4 - remainder, '=');
+            }
+
+            var encodedTarget = Encoding.UTF8.GetString(
+                Convert.FromBase64String(payload));
+            var targetText = Uri.UnescapeDataString(encodedTarget);
+            return Uri.TryCreate(targetText, UriKind.Absolute, out var targetUrl) &&
+                IsHttpUrl(targetUrl)
+                    ? targetUrl
+                    : null;
+        }
+        catch (FormatException)
+        {
+            return null;
+        }
+    }
+
+    private static string? ParseExternalRatingId(Uri? targetUrl)
+    {
+        if (targetUrl is null)
+        {
+            return null;
+        }
+
+        Match match;
+        if (IsHostOrSubdomain(targetUrl.IdnHost, "imdb.com"))
+        {
+            match = ImdbIdRegex().Match(targetUrl.AbsolutePath);
+            return match.Success
+                ? match.Groups["id"].Value.ToLowerInvariant()
+                : null;
+        }
+
+        if (IsHostOrSubdomain(targetUrl.IdnHost, "kinopoisk.ru"))
+        {
+            match = KinopoiskIdRegex().Match(targetUrl.AbsolutePath);
+            return match.Success ? match.Groups["id"].Value : null;
+        }
+
+        return null;
+    }
+
+    private static bool IsHttpUrl(Uri url) =>
+        url.Scheme.Equals(Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase) ||
+        url.Scheme.Equals(Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsHostOrSubdomain(string host, string domain) =>
+        host.Equals(domain, StringComparison.OrdinalIgnoreCase) ||
+        host.EndsWith($".{domain}", StringComparison.OrdinalIgnoreCase);
 
     private static IReadOnlyList<EpisodeScheduleEntry> ParseSchedule(
         IDocument document) =>
@@ -681,4 +772,10 @@ internal sealed partial class Scraper : IScraper
 
     [GeneratedRegex(@"initCDN(?:Series|Movies)Events\s*\([^,]+,\s*(\d+)", RegexOptions.IgnoreCase)]
     private static partial Regex TranslatorIdRegex();
+
+    [GeneratedRegex(@"^/title/(?<id>tt\d+)(?:/|$)", RegexOptions.IgnoreCase)]
+    private static partial Regex ImdbIdRegex();
+
+    [GeneratedRegex(@"^/film/(?<id>\d+)(?:/|$)", RegexOptions.IgnoreCase)]
+    private static partial Regex KinopoiskIdRegex();
 }

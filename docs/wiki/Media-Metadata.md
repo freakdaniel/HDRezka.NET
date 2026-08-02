@@ -44,7 +44,10 @@ request
 `Rating` is the internal aggregate score submitted by HDRezka users, not an
 external service score. `Rating.Value` and `Rating.Votes` are nullable when the
 page has no recognizable rating. External scores remain available through
-`Details.ExternalRatings`.
+`Details.ExternalRatings`. An external rating contains the HDRezka redirect in
+`Url`, the decoded external address in `TargetUrl`, and the source identifier in
+`Id`. IMDb identifiers retain the `tt` prefix, while Kinopoisk identifiers are
+numeric strings. Redirect decoding is local and does not send another request
 
 An authenticated account can submit an integer score from 1 through 10:
 

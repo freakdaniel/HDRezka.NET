@@ -916,8 +916,20 @@ public sealed class MediaTests
               <table class="b-post__info">
                 <tr><td class="l"><h2>Рейтинги</h2></td><td>
                   <span class="b-post__info_rates imdb">
-                    <a href="/external/imdb">IMDb</a>
+                    <a href="/help/aHR0cHMlM0ElMkYlMkZ3d3cuaW1kYi5jb20lMkZ0aXRsZSUyRnR0NDIyODgwMiUyRg==/">IMDb</a>
                     <span class="bold">8.1</span><i>(12 345)</i>
+                  </span>
+                  <span class="b-post__info_rates kp">
+                    <a href="/help/aHR0cHMlM0ElMkYlMkZ3d3cua2lub3BvaXNrLnJ1JTJGZmlsbSUyRjg5MTYwMSUyRg==/">Кинопоиск</a>
+                    <span class="bold">6.35</span><i>(1 545)</i>
+                  </span>
+                  <span class="b-post__info_rates invalid">
+                    <a href="/help/not-base64/">Invalid</a>
+                    <span class="bold">5.0</span><i>(10)</i>
+                  </span>
+                  <span class="b-post__info_rates direct">
+                    <a href="https://m.imdb.com/title/TT7654321/">Direct IMDb</a>
+                    <span class="bold">7.0</span><i>(20)</i>
                   </span>
                 </td></tr>
                 <tr><td class="l"><h2>Входит в списки</h2></td>
@@ -992,10 +1004,39 @@ public sealed class MediaTests
         Assert.Equal(TimeSpan.FromMinutes(45), media.Details.Duration);
         Assert.Equal("Test collection", Assert.Single(media.Details.Collections).Name);
         Assert.Equal("Best series", Assert.Single(media.Details.Rankings).Name);
-        var externalRating = Assert.Single(media.Details.ExternalRatings);
-        Assert.Equal("IMDb", externalRating.Source);
-        Assert.Equal(8.1, externalRating.Value);
-        Assert.Equal(12345, externalRating.Votes);
+        Assert.Equal(4, media.Details.ExternalRatings.Count);
+        var imdbRating = Assert.Single(
+            media.Details.ExternalRatings,
+            rating => rating.Source == "IMDb");
+        Assert.Equal(8.1, imdbRating.Value);
+        Assert.Equal(12345, imdbRating.Votes);
+        Assert.Equal(
+            new Uri("https://hdrezka.test/help/aHR0cHMlM0ElMkYlMkZ3d3cuaW1kYi5jb20lMkZ0aXRsZSUyRnR0NDIyODgwMiUyRg==/"),
+            imdbRating.Url);
+        Assert.Equal(
+            new Uri("https://www.imdb.com/title/tt4228802/"),
+            imdbRating.TargetUrl);
+        Assert.Equal("tt4228802", imdbRating.Id);
+
+        var kinopoiskRating = Assert.Single(
+            media.Details.ExternalRatings,
+            rating => rating.Source == "Кинопоиск");
+        Assert.Equal(
+            new Uri("https://www.kinopoisk.ru/film/891601/"),
+            kinopoiskRating.TargetUrl);
+        Assert.Equal("891601", kinopoiskRating.Id);
+
+        var invalidRating = Assert.Single(
+            media.Details.ExternalRatings,
+            rating => rating.Source == "Invalid");
+        Assert.Null(invalidRating.TargetUrl);
+        Assert.Null(invalidRating.Id);
+
+        var directRating = Assert.Single(
+            media.Details.ExternalRatings,
+            rating => rating.Source == "Direct IMDb");
+        Assert.Equal(directRating.Url, directRating.TargetUrl);
+        Assert.Equal("tt7654321", directRating.Id);
         Assert.Equal("Related movie", Assert.Single(media.Details.Recommendations).Title);
         var schedule = Assert.Single(media.Details.Schedule);
         Assert.Equal(500, schedule.Id);
