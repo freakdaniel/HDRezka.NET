@@ -1,0 +1,53 @@
+name: Publish GitHub Package
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Restore
+        run: dotnet restore HDRezka.NET.slnx
+
+      - name: Test
+        run: dotnet test HDRezka.NET.slnx --configuration Release --no-restore
+
+      - name: Pack
+        shell: bash
+        run: |
+          PACKAGE_VERSION="${GITHUB_REF_NAME#v}"
+          dotnet pack src/HDRezka.NET/HDRezka.NET.csproj \
+            --configuration Release \
+            --no-restore \
+            --output artifacts \
+            -p:PackageVersion="$PACKAGE_VERSION"
+
+      - name: Add GitHub Packages source
+        run: |
+          dotnet nuget add source \
+            --username "${{ github.actor }}" \
+            --password "${{ secrets.GITHUB_TOKEN }}" \
+            --store-password-in-clear-text \
+            --name github \
+            "https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json"
+
+      - name: Publish to GitHub Packages
+        run: |
+          dotnet nuget push "artifacts/*.nupkg" \
+            --source github \
+            --skip-duplicate
