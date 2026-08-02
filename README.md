@@ -60,6 +60,7 @@ using var media = await session.GetAsync("/films/drama/123-title.html");
 
 Console.WriteLine(media.Name);
 Console.WriteLine(media.Description);
+Console.WriteLine(media.ShortDescription);
 Console.WriteLine(media.Thumbnail);
 Console.WriteLine(media.Rating.Value);
 Console.WriteLine(media.Rating.Votes);
@@ -108,6 +109,11 @@ using var media = await Media.CreateAsync(
 `Details` also exposes the full release date, countries, genres, directors,
 cast, quality, age rating, tagline, external ratings, collections, rankings,
 recommendations, and series schedule when present
+
+`Description` contains the complete text from the visible media page, while
+`ShortDescription` contains the shorter metadata summary when the website
+provides it. Both values are parsed from the same response without an extra
+request
 
 `media.Rating` is the aggregate rating submitted by HDRezka users. Ratings
 imported from IMDb, Kinopoisk, and other services are available separately

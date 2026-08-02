@@ -7,6 +7,7 @@ internal sealed record PageSnapshot(
     string? OriginalName,
     IReadOnlyList<string> OriginalNames,
     string Description,
+    string? ShortDescription,
     Uri Thumbnail,
     Uri? ThumbnailHighQuality,
     int? ReleaseYear,

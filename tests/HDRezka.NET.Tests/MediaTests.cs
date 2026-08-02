@@ -38,7 +38,8 @@ public sealed class MediaTests
         Assert.Equal("Озвучка (Украинский)", media.Translators[999].Name);
         Assert.Equal(4, media.TranslationOptions.Count);
         Assert.Equal(2, media.TranslationOptions.Count(item => item.Id == 56));
-        Assert.Equal("Semantic description", media.Description);
+        Assert.Equal("Description text.", media.Description);
+        Assert.Equal("Semantic description", media.ShortDescription);
         Assert.Equal(new Uri("https://images.test/poster.jpg"), media.Thumbnail);
         Assert.Equal(new Uri("https://hdrezka.test/poster-hq.jpg"), media.ThumbnailHighQuality);
         Assert.Equal(new Uri("https://hdrezka.test/films/122-first.html"), media.OtherParts[0].Url);
@@ -68,6 +69,31 @@ public sealed class MediaTests
         Assert.Equal([".хак//Корни"], media.Names);
         Assert.Equal(".hack//SIGN", media.OriginalName);
         Assert.Equal([".hack//Roots", ".hack//SIGN"], media.OriginalNames);
+    }
+
+    [Fact]
+    public async Task CreateAsync_SeparatesFullAndShortDescriptions()
+    {
+        var html = MovieHtml
+            .Replace(
+                "Semantic description",
+                "Short description...",
+                StringComparison.Ordinal)
+            .Replace(
+                " Description text. ",
+                " Complete description that continues after the summary. ",
+                StringComparison.Ordinal);
+        using var client = CreateClient((_, _) =>
+            Task.FromResult(StubHttpHandler.Html(html)));
+
+        using var media = await Media.CreateAsync(
+            "https://hdrezka.test/films/drama/123-test.html",
+            httpClient: client);
+
+        Assert.Equal(
+            "Complete description that continues after the summary.",
+            media.Description);
+        Assert.Equal("Short description...", media.ShortDescription);
     }
 
     [Fact]
@@ -868,6 +894,7 @@ public sealed class MediaTests
 
         Assert.Equal("Fallback title", media.Name);
         Assert.Equal("Fallback description", media.Description);
+        Assert.Equal("Fallback description", media.ShortDescription);
         Assert.Equal(2025, media.ReleaseYear);
         Assert.Equal(new Uri("https://images.test/fallback.jpg"), media.Thumbnail);
     }

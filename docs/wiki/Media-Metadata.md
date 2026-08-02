@@ -26,6 +26,7 @@ Console.WriteLine(media.Origin);
 Console.WriteLine(media.Name);
 Console.WriteLine(media.OriginalName);
 Console.WriteLine(media.Description);
+Console.WriteLine(media.ShortDescription);
 Console.WriteLine(media.ReleaseYear);
 Console.WriteLine(media.Thumbnail);
 Console.WriteLine(media.ThumbnailHighQuality);
@@ -34,6 +35,11 @@ Console.WriteLine(media.Rating.Votes);
 Console.WriteLine(media.Format);
 Console.WriteLine(media.Category);
 ```
+
+`Description` contains the complete visible description. `ShortDescription`
+contains the shorter metadata summary and can be `null` when the website does
+not provide one separately. Loading both values does not require an additional
+request
 
 `Rating` is the internal aggregate score submitted by HDRezka users, not an
 external service score. `Rating.Value` and `Rating.Votes` are nullable when the

@@ -7,6 +7,38 @@ public sealed class AuthenticationTests
 {
     [Fact]
     [Trait("Category", "Live")]
+    public async Task DescriptionMedia_LoadsFullAndShortDescriptions()
+    {
+        var email = Environment.GetEnvironmentVariable("HDREZKA_TEST_EMAIL");
+        var password = Environment.GetEnvironmentVariable("HDREZKA_TEST_PASSWORD");
+        var mediaPath = Environment.GetEnvironmentVariable(
+            "HDREZKA_TEST_DESCRIPTION_MEDIA_PATH");
+        if (string.IsNullOrWhiteSpace(email) ||
+            string.IsNullOrWhiteSpace(password) ||
+            string.IsNullOrWhiteSpace(mediaPath))
+        {
+            return;
+        }
+
+        var origin = Environment.GetEnvironmentVariable("HDREZKA_TEST_ORIGIN")
+            ?? "https://hdrezka.fi";
+        using var client = new Client(origin);
+        await client.LoginAsync(email, password);
+        try
+        {
+            using var media = await client.GetAsync(mediaPath);
+
+            var shortDescription = Assert.IsType<string>(media.ShortDescription);
+            Assert.True(media.Description.Length > shortDescription.Length);
+        }
+        finally
+        {
+            await client.LogoutAsync();
+        }
+    }
+
+    [Fact]
+    [Trait("Category", "Live")]
     public async Task UnavailableMedia_LoadsMetadata_AndRejectsPlayback()
     {
         var email = Environment.GetEnvironmentVariable("HDREZKA_TEST_EMAIL");

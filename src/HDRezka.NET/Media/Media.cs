@@ -46,6 +46,7 @@ public sealed class Media : IDisposable
         OriginalNames = page.OriginalNames;
         OriginalName = page.OriginalName;
         Description = page.Description;
+        ShortDescription = page.ShortDescription;
         Thumbnail = page.Thumbnail;
         ThumbnailHighQuality = page.ThumbnailHighQuality;
         ReleaseYear = page.ReleaseYear;
@@ -138,6 +139,14 @@ public sealed class Media : IDisposable
     /// Gets the media description with surrounding whitespace removed
     /// </summary>
     public string Description { get; }
+
+    /// <summary>
+    /// Gets the shorter description provided by the page metadata
+    /// </summary>
+    /// <value>
+    /// Short description, or <see langword="null"/> when the page does not provide one separately
+    /// </value>
+    public string? ShortDescription { get; }
 
     /// <summary>
     /// Gets the thumbnail URL shown directly on the media page

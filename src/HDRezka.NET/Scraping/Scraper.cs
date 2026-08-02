@@ -17,6 +17,7 @@ internal sealed partial class Scraper : IScraper
         var origin = new Uri(url.GetLeftPart(UriPartial.Authority));
         var names = ParseNames(document, url);
         var originalNames = ParseOriginalNames(document);
+        var shortDescription = ParseShortDescription(document);
         var translationOptions = ParseTranslators(document);
         var playback = ParsePlayback(document, translationOptions);
         var translators = translationOptions
@@ -30,7 +31,8 @@ internal sealed partial class Scraper : IScraper
             names,
             originalNames.LastOrDefault(),
             originalNames,
-            ParseDescription(document),
+            ParseDescription(document, shortDescription),
+            shortDescription,
             ParseUri(
                 origin,
                 ParseMetaContent(document, "og:image") ??
@@ -529,12 +531,19 @@ internal sealed partial class Scraper : IScraper
         throw new ParseException("Could not determine any translators or a player status.");
     }
 
-    private static string ParseDescription(IDocument document) =>
-        document.QuerySelector("[itemprop=\"description\"]")?.GetAttribute("content")?.Trim() ??
-        document.QuerySelector(".b-post__description_text")?.TextContent.Trim() ??
-        ParseMetaContent(document, "og:description") ??
+    private static string ParseDescription(
+        IDocument document,
+        string? shortDescription) =>
+        EmptyToNull(document.QuerySelector(".b-post__description_text")?.TextContent) ??
+        shortDescription ??
         document.QuerySelector("meta[name=\"description\"]")?.GetAttribute("content")?.Trim() ??
         "";
+
+    private static string? ParseShortDescription(IDocument document) =>
+        EmptyToNull(
+            document.QuerySelector("[itemprop=\"description\"]")
+                ?.GetAttribute("content")) ??
+        ParseMetaContent(document, "og:description");
 
     private static string? ParseMetaContent(IDocument document, string property) =>
         document.QuerySelector($"meta[property=\"{property}\"]")
