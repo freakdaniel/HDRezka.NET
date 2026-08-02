@@ -54,6 +54,7 @@ public sealed class Media : IDisposable
         Details = page.Details;
         Rating = page.Rating;
         AccountTier = page.AccountTier;
+        Playback = page.Playback;
         TranslationOptions = page.TranslationOptions;
         Translators = page.Translators;
         TranslatorsByName = page.TranslatorsByName;
@@ -254,6 +255,11 @@ public sealed class Media : IDisposable
     /// Gets whether the page was loaded with an account that has an active Premium subscription
     /// </summary>
     public bool IsPremiumAccount => AccountTier == AccountTier.Premium;
+
+    /// <summary>
+    /// Gets current player availability and the reason reported by the website
+    /// </summary>
+    public PlaybackState Playback { get; }
 
     /// <summary>
     /// Gets every translation variant in the same order as the website
@@ -632,6 +638,9 @@ public sealed class Media : IDisposable
     /// <exception cref="InvalidOperationException">
     /// The loaded page is not a series
     /// </exception>
+    /// <exception cref="PlaybackUnavailableException">
+    /// The media page exists but the website does not currently provide a player
+    /// </exception>
     /// <exception cref="HttpException">
     /// The website returned an unsuccessful HTTP status after transient retry handling
     /// </exception>
@@ -651,6 +660,7 @@ public sealed class Media : IDisposable
         CancellationToken cancellationToken = default)
     {
         EnsureSeries();
+        ThrowIfPlaybackUnavailable();
         lock (_cacheLock)
         {
             _seriesInfoTask ??= LoadSeriesInfoAsync();
@@ -682,6 +692,9 @@ public sealed class Media : IDisposable
     /// <exception cref="StreamFetchException">
     /// The website did not return season information for the requested translator
     /// </exception>
+    /// <exception cref="PlaybackUnavailableException">
+    /// The media page exists but the website does not currently provide a player
+    /// </exception>
     /// <exception cref="PremiumRequiredException">
     /// The requested translation requires an active Premium subscription
     /// </exception>
@@ -706,6 +719,7 @@ public sealed class Media : IDisposable
     {
         EnsureSeries();
         ArgumentException.ThrowIfNullOrWhiteSpace(translation);
+        ThrowIfPlaybackUnavailable();
         var translator = GetTranslatorCandidates(
             translation,
             preferred: null,
@@ -728,6 +742,9 @@ public sealed class Media : IDisposable
     /// <exception cref="InvalidOperationException">
     /// The loaded page is not a series
     /// </exception>
+    /// <exception cref="PlaybackUnavailableException">
+    /// The media page exists but the website does not currently provide a player
+    /// </exception>
     /// <exception cref="HttpException">
     /// The website returned an unsuccessful HTTP status after transient retry handling
     /// </exception>
@@ -747,6 +764,7 @@ public sealed class Media : IDisposable
         CancellationToken cancellationToken = default)
     {
         EnsureSeries();
+        ThrowIfPlaybackUnavailable();
         lock (_cacheLock)
         {
             _episodesInfoTask ??= LoadEpisodesInfoAsync();
@@ -868,6 +886,9 @@ public sealed class Media : IDisposable
     /// <exception cref="StreamFetchException">
     /// No translator is available or the website did not return a usable stream
     /// </exception>
+    /// <exception cref="PlaybackUnavailableException">
+    /// The media page exists but the website does not currently provide a player
+    /// </exception>
     /// <exception cref="PremiumRequiredException">
     /// The explicitly selected translation or returned content requires an active Premium subscription
     /// </exception>
@@ -901,6 +922,7 @@ public sealed class Media : IDisposable
                 throw new ArgumentException("Both season and episode are required for a TV series.");
             }
 
+            ThrowIfPlaybackUnavailable();
             var (translator, _) = await FindSeriesTranslatorAsync(
                 season.Value,
                 episode.Value,
@@ -918,6 +940,7 @@ public sealed class Media : IDisposable
 
         if (Format == MediaFormat.Movie)
         {
+            ThrowIfPlaybackUnavailable();
             var translator = GetTranslatorCandidates(
                 translation,
                 preferred,
@@ -970,6 +993,9 @@ public sealed class Media : IDisposable
     /// <exception cref="StreamFetchException">
     /// No translator is available before episode loading begins
     /// </exception>
+    /// <exception cref="PlaybackUnavailableException">
+    /// The media page exists but the website does not currently provide a player
+    /// </exception>
     /// <exception cref="PremiumRequiredException">
     /// The explicitly selected translation or returned content requires an active Premium subscription
     /// </exception>
@@ -998,6 +1024,7 @@ public sealed class Media : IDisposable
         CancellationToken cancellationToken = default)
     {
         EnsureSeries();
+        ThrowIfPlaybackUnavailable();
         var (translator, seriesInfo) = await FindSeriesTranslatorAsync(
             season,
             null,
@@ -1569,6 +1596,14 @@ public sealed class Media : IDisposable
         {
             throw new InvalidOperationException(
                 "Season and episode information is only available for a TV series.");
+        }
+    }
+
+    private void ThrowIfPlaybackUnavailable()
+    {
+        if (!Playback.IsAvailable)
+        {
+            throw new PlaybackUnavailableException(Playback);
         }
     }
 

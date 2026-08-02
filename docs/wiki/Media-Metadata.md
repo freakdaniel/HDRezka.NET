@@ -72,6 +72,24 @@ first localized title, while `OriginalName` is the last original title or
 Format and category answer different questions; for example, an anime series
 has `MediaFormat.Series` and `MediaCategory.Anime`
 
+## Playback availability
+
+A media page can keep its metadata after the website loses its player data or
+temporarily starts restoring it:
+
+```csharp
+Console.WriteLine(media.Playback.IsAvailable);
+Console.WriteLine(media.Playback.Availability);
+Console.WriteLine(media.Playback.Reason);
+```
+
+`PlaybackAvailability` contains `Available`, `TemporarilyUnavailable`, and
+`Unavailable`. When playback is unavailable, translator collections are empty
+while the remaining media metadata and non-player operations stay accessible
+
+Stream and episode operations throw `PlaybackUnavailableException` containing
+the same `PlaybackState` without sending a player request
+
 ## Extended details
 
 `Details` contains metadata that is already present in the downloaded media

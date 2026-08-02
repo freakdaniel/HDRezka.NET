@@ -7,6 +7,21 @@ using var client = new Client("https://your-mirror.example");
 using var media = await client.GetAsync(mediaPath, cancellationToken);
 ```
 
+The media page itself can exist while its player is temporarily unavailable or
+has been removed. Inspect the state before displaying player controls:
+
+```csharp
+if (!media.Playback.IsAvailable)
+{
+    Console.WriteLine(media.Playback.Reason ?? "Playback is unavailable");
+    return;
+}
+```
+
+Calling a stream or episode method in this state throws
+`PlaybackUnavailableException`. Loading the media page still succeeds so the
+application can display its metadata
+
 ## Movies
 
 For a movie, season and episode are not required:

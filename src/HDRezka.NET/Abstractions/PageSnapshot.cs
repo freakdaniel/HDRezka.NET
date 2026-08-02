@@ -15,6 +15,7 @@ internal sealed record PageSnapshot(
     MediaDetails Details,
     Rating Rating,
     AccountTier AccountTier,
+    PlaybackState Playback,
     IReadOnlyList<Translator> TranslationOptions,
     IReadOnlyDictionary<int, Translator> Translators,
     IReadOnlyDictionary<string, Translator> TranslatorsByName,

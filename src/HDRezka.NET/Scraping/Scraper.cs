@@ -18,6 +18,7 @@ internal sealed partial class Scraper : IScraper
         var names = ParseNames(document, url);
         var originalNames = ParseOriginalNames(document);
         var translationOptions = ParseTranslators(document);
+        var playback = ParsePlayback(document, translationOptions);
         var translators = translationOptions
             .GroupBy(translator => translator.Id)
             .ToDictionary(group => group.Key, group => group.First());
@@ -42,6 +43,7 @@ internal sealed partial class Scraper : IScraper
             ParseDetails(document, origin),
             ParseRating(document),
             AccountTokenParser.Parse(document),
+            playback,
             translationOptions,
             translators,
             translationOptions
@@ -471,19 +473,53 @@ internal sealed partial class Scraper : IScraper
 
         var scripts = string.Join("\n", document.Scripts.Select(script => script.TextContent));
         var idMatch = TranslatorIdRegex().Match(scripts);
-        if (!idMatch.Success)
+        if (idMatch.Success)
         {
-            throw new ParseException("Could not determine any translators.");
+            var fallbackName = document.QuerySelectorAll(".b-post__info tr")
+                .FirstOrDefault(row => row.TextContent.Contains("переводе", StringComparison.OrdinalIgnoreCase))
+                ?.QuerySelectorAll("td")
+                .LastOrDefault()
+                ?.TextContent.Trim() ?? "Unknown";
+            var fallbackId = int.Parse(idMatch.Groups[1].Value, CultureInfo.InvariantCulture);
+            result.Add(new Translator(fallbackId, fallbackName, false));
         }
 
-        var fallbackName = document.QuerySelectorAll(".b-post__info tr")
-            .FirstOrDefault(row => row.TextContent.Contains("переводе", StringComparison.OrdinalIgnoreCase))
-            ?.QuerySelectorAll("td")
-            .LastOrDefault()
-            ?.TextContent.Trim() ?? "Unknown";
-        var fallbackId = int.Parse(idMatch.Groups[1].Value, CultureInfo.InvariantCulture);
-        result.Add(new Translator(fallbackId, fallbackName, false));
         return result;
+    }
+
+    private static PlaybackState ParsePlayback(
+        IDocument document,
+        IReadOnlyList<Translator> translators)
+    {
+        var status = document.QuerySelector(".b-player .b-post__status_wrapper") ??
+            document.QuerySelector(".b-post__status_wrapper");
+        if (status is not null)
+        {
+            var message = status.QuerySelector(".b-post__go_status") ?? status;
+            var reason = WhitespaceRegex().Replace(
+                string.Join(" ", message.ChildNodes.Select(node => node.TextContent)),
+                " ").Trim();
+            var availability = reason.Contains("восстанов", StringComparison.OrdinalIgnoreCase) ||
+                reason.Contains("временно", StringComparison.OrdinalIgnoreCase) ||
+                reason.Contains("работаем", StringComparison.OrdinalIgnoreCase)
+                    ? PlaybackAvailability.TemporarilyUnavailable
+                    : PlaybackAvailability.Unavailable;
+            return new PlaybackState(
+                availability,
+                string.IsNullOrWhiteSpace(reason) ? null : reason);
+        }
+
+        if (translators.Count > 0)
+        {
+            return new PlaybackState(PlaybackAvailability.Available, null);
+        }
+
+        if (document.QuerySelector(".b-player, #player") is not null)
+        {
+            return new PlaybackState(PlaybackAvailability.Unavailable, null);
+        }
+
+        throw new ParseException("Could not determine any translators or a player status.");
     }
 
     private static string ParseDescription(IDocument document) =>
@@ -617,6 +653,9 @@ internal sealed partial class Scraper : IScraper
 
     [GeneratedRegex(@"\D")]
     private static partial Regex NonDigitRegex();
+
+    [GeneratedRegex(@"\s+")]
+    private static partial Regex WhitespaceRegex();
 
     [GeneratedRegex(@"(?<season>\d+)\s+сезон\s+(?<episode>\d+)\s+серия", RegexOptions.IgnoreCase)]
     private static partial Regex ScheduleEpisodeRegex();

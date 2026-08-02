@@ -15,6 +15,7 @@ use standard .NET exceptions
 | `RatingException` | An internal rating was rejected | Do not retry an account that has already voted |
 | `PremiumRequiredException` | Content, a translation, or a quality is Premium-only | Offer an available alternative or require Premium |
 | `CaptchaException` | The website requested interactive captcha verification | Stop automation and let the user complete verification |
+| `PlaybackUnavailableException` | The title exists but its player is missing or being restored | Display `Playback.Reason` and keep the metadata page available |
 | `StreamFetchException` | No usable stream or translator was returned | Try another translation or report temporary unavailability |
 | `HttpException` | The website returned an unsuccessful HTTP status | Inspect `StatusCode`; retry only transient statuses |
 | `ParseException` | Markup, JSON, cookies, compression, or stream data could not be read | Check for a website change and report a reproducible issue |

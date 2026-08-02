@@ -83,6 +83,21 @@ foreach (var translator in media.TranslationOptions)
 director's-cut variants share the same numeric ID, while `Translators` remains
 available as a compatibility view containing the first variant for each ID
 
+Some media pages remain available while their player data is lost or being
+restored. Check `Playback` before requesting streams:
+
+```csharp
+if (!media.Playback.IsAvailable)
+{
+    Console.WriteLine(media.Playback.Availability);
+    Console.WriteLine(media.Playback.Reason);
+}
+```
+
+Metadata, comments, ratings, related parts, and account operations remain
+available for these pages. Stream and episode operations throw
+`PlaybackUnavailableException` without sending a player request
+
 For a single page, a session is optional:
 
 ```csharp

@@ -7,6 +7,43 @@ public sealed class AuthenticationTests
 {
     [Fact]
     [Trait("Category", "Live")]
+    public async Task UnavailableMedia_LoadsMetadata_AndRejectsPlayback()
+    {
+        var email = Environment.GetEnvironmentVariable("HDREZKA_TEST_EMAIL");
+        var password = Environment.GetEnvironmentVariable("HDREZKA_TEST_PASSWORD");
+        var mediaPath = Environment.GetEnvironmentVariable(
+            "HDREZKA_TEST_UNAVAILABLE_MEDIA_PATH");
+        if (string.IsNullOrWhiteSpace(email) ||
+            string.IsNullOrWhiteSpace(password) ||
+            string.IsNullOrWhiteSpace(mediaPath))
+        {
+            return;
+        }
+
+        var origin = Environment.GetEnvironmentVariable("HDREZKA_TEST_ORIGIN")
+            ?? "https://hdrezka.fi";
+        using var client = new Client(origin);
+        await client.LoginAsync(email, password);
+        try
+        {
+            using var media = await client.GetAsync(mediaPath);
+
+            Assert.True(media.Id > 0);
+            Assert.False(string.IsNullOrWhiteSpace(media.Name));
+            Assert.False(media.Playback.IsAvailable);
+            Assert.Empty(media.TranslationOptions);
+            var exception = await Assert.ThrowsAsync<PlaybackUnavailableException>(
+                () => media.GetStreamAsync());
+            Assert.Same(media.Playback, exception.Playback);
+        }
+        finally
+        {
+            await client.LogoutAsync();
+        }
+    }
+
+    [Fact]
+    [Trait("Category", "Live")]
     public async Task Login_LoadMedia_AndLogout()
     {
         var email = Environment.GetEnvironmentVariable("HDREZKA_TEST_EMAIL");

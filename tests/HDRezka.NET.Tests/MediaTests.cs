@@ -46,6 +46,94 @@ public sealed class MediaTests
     }
 
     [Fact]
+    public async Task CreateAsync_PreservesMetadataWhenPlaybackIsTemporarilyUnavailable()
+    {
+        var requests = 0;
+        using var client = CreateClient((_, _) =>
+        {
+            requests++;
+            return Task.FromResult(StubHttpHandler.Html(UnavailableMovieHtml));
+        });
+
+        using var media = await Media.CreateAsync(
+            "https://hdrezka.test/animation/adventures/18905-test.html",
+            httpClient: client);
+
+        Assert.Equal(18905, media.Id);
+        Assert.Equal("Космический крейсер Ямато 6", media.Name);
+        Assert.Equal(MediaFormat.Movie, media.Format);
+        Assert.Equal(MediaCategory.Anime, media.Category);
+        Assert.Empty(media.TranslationOptions);
+        Assert.Empty(media.Translators);
+        Assert.False(media.Playback.IsAvailable);
+        Assert.Equal(
+            PlaybackAvailability.TemporarilyUnavailable,
+            media.Playback.Availability);
+        Assert.Equal(
+            "Мы работаем над восстановлением. Часть данных уже доступна для просмотра!",
+            media.Playback.Reason);
+
+        var exception = await Assert.ThrowsAsync<PlaybackUnavailableException>(
+            () => media.GetStreamAsync());
+
+        Assert.Same(media.Playback, exception.Playback);
+        var reason = Assert.IsType<string>(media.Playback.Reason);
+        Assert.Contains(reason, exception.Message, StringComparison.Ordinal);
+        Assert.Equal(1, requests);
+    }
+
+    [Fact]
+    public async Task CreateAsync_RejectsMissingPlayerMarkupWithoutWebsiteStatus()
+    {
+        using var client = CreateClient((_, _) =>
+            Task.FromResult(
+                StubHttpHandler.Html(
+                    UnavailableMovieHtml.Replace(
+                        UnavailablePlayerHtml,
+                        "",
+                        StringComparison.Ordinal))));
+
+        var exception = await Assert.ThrowsAsync<ParseException>(() =>
+            Media.CreateAsync(
+                "https://hdrezka.test/animation/adventures/18905-test.html",
+                httpClient: client));
+
+        Assert.Equal(
+            "Could not determine any translators or a player status.",
+            exception.Message);
+    }
+
+    [Fact]
+    public async Task UnavailableSeries_RejectsEveryPlayerOperationWithoutRequests()
+    {
+        var requests = 0;
+        var html = UnavailableMovieHtml
+            .Replace("video.movie", "video.tv_series", StringComparison.Ordinal)
+            .Replace("Космический крейсер Ямато 6", "Unavailable show", StringComparison.Ordinal);
+        using var client = CreateClient((_, _) =>
+        {
+            requests++;
+            return Task.FromResult(StubHttpHandler.Html(html));
+        });
+        using var media = await Media.CreateAsync(
+            "https://hdrezka.test/series/18905-test.html",
+            httpClient: client);
+
+        Assert.Equal(MediaFormat.Series, media.Format);
+        await Assert.ThrowsAsync<PlaybackUnavailableException>(
+            () => media.GetSeriesInfoAsync());
+        await Assert.ThrowsAsync<PlaybackUnavailableException>(
+            () => media.GetSeriesInfoAsync("56"));
+        await Assert.ThrowsAsync<PlaybackUnavailableException>(
+            () => media.GetEpisodesInfoAsync());
+        await Assert.ThrowsAsync<PlaybackUnavailableException>(
+            () => media.GetStreamAsync(1, 1));
+        await Assert.ThrowsAsync<PlaybackUnavailableException>(
+            () => media.GetSeasonStreamsAsync(1));
+        Assert.Equal(1, requests);
+    }
+
+    [Fact]
     public async Task SetBookmarkAsync_UsesLoadedFolderStateAndUpdatesSnapshot()
     {
         var postedForms = new List<string>();
@@ -928,6 +1016,47 @@ public sealed class MediaTests
 
     private const string PremiumAccountToken =
         "eyJhbGciOiJub25lIn0.eyJkYXRhIjp7ImlzX2xvZ2dlZCI6dHJ1ZSwibWVtYmVyX2lkIjp7ImlzX3ByZW1pdW0iOiIxIn19fQ.signature";
+
+    private const string UnavailablePlayerHtml = """
+        <div id="player" class="b-player">
+          <div class="b-post__status_wrapper">
+            <div class="b-post__status_logo"></div>
+            <div class="b-post__go_status">
+              Мы работаем над восстановлением.<br>
+              Часть данных уже доступна для просмотра!
+            </div>
+          </div>
+        </div>
+        """;
+
+    private static string UnavailableMovieHtml =>
+        UnavailableMovieTemplate.Replace(
+            "{player}",
+            UnavailablePlayerHtml,
+            StringComparison.Ordinal);
+
+    private const string UnavailableMovieTemplate = """
+        <!doctype html>
+        <html>
+        <head>
+          <title>Unavailable movie</title>
+          <meta property="og:type" content="video.movie">
+          <meta property="og:image" content="/yamato.jpg">
+        </head>
+        <body>
+          <main class="b-content__main">
+            <input id="post_id" value="18905">
+            <h1 class="b-post__title">Космический крейсер Ямато 6</h1>
+            <div class="b-post__description_text">Описание остается доступным.</div>
+            <div class="b-sidecover"><img src="/yamato.jpg"></div>
+            <table class="b-post__info">
+              <tr><td><a href="/year/2009/">2009</a></td></tr>
+            </table>
+            {player}
+          </main>
+        </body>
+        </html>
+        """;
 
     private const string SeriesHtml = """
         <!doctype html>

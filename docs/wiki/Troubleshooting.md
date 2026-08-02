@@ -45,6 +45,8 @@ an issue:
 
 ## No stream is returned
 
+- Check `media.Playback.IsAvailable` before displaying player controls
+- Display `media.Playback.Reason` when the website removed or is restoring the player
 - Confirm that `media.Format` is `Movie` or `Series`, not `Unknown`
 - For a series, supply both `season` and `episode`
 - Inspect `TranslationOptions` and try an explicit translator ID or exact name

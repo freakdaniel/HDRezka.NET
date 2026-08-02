@@ -195,6 +195,45 @@ public sealed class StreamFetchException : ApiException
 }
 
 /// <summary>
+/// Indicates that the media page exists but the website does not currently provide a player
+/// </summary>
+public sealed class PlaybackUnavailableException : ApiException
+{
+    /// <summary>
+    /// Creates an exception containing the availability state reported by the media page
+    /// </summary>
+    /// <param name="playback">
+    /// Unavailable playback state and optional website reason
+    /// </param>
+    /// <exception cref="ArgumentNullException">
+    /// <paramref name="playback"/> is <see langword="null"/>
+    /// </exception>
+    public PlaybackUnavailableException(PlaybackState playback)
+        : base(CreateMessage(playback))
+    {
+        Playback = playback;
+    }
+
+    /// <summary>
+    /// Gets the unavailable playback state that caused the operation to fail
+    /// </summary>
+    public PlaybackState Playback { get; }
+
+    private static string CreateMessage(PlaybackState playback)
+    {
+        ArgumentNullException.ThrowIfNull(playback);
+        if (!string.IsNullOrWhiteSpace(playback.Reason))
+        {
+            return $"Playback is unavailable: {playback.Reason}";
+        }
+
+        return playback.Availability == PlaybackAvailability.TemporarilyUnavailable
+            ? "Playback is temporarily unavailable."
+            : "Playback is unavailable.";
+    }
+}
+
+/// <summary>
 /// Indicates that the website requested captcha verification
 /// </summary>
 public sealed class CaptchaException : ApiException

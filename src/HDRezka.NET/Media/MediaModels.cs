@@ -58,6 +58,46 @@ public enum MediaCategory
 }
 
 /// <summary>
+/// Identifies whether the website currently provides a player for media
+/// </summary>
+public enum PlaybackAvailability
+{
+    /// <summary>
+    /// The player and at least one translation are available
+    /// </summary>
+    Available,
+
+    /// <summary>
+    /// The website reports that playback is temporarily unavailable or being restored
+    /// </summary>
+    TemporarilyUnavailable,
+
+    /// <summary>
+    /// The website does not provide a player for this media
+    /// </summary>
+    Unavailable
+}
+
+/// <summary>
+/// Describes current player availability reported by the media page
+/// </summary>
+/// <param name="Availability">
+/// Current player availability
+/// </param>
+/// <param name="Reason">
+/// Human-readable website message, or <see langword="null"/> when playback is available or no message is provided
+/// </param>
+public sealed record PlaybackState(
+    PlaybackAvailability Availability,
+    string? Reason)
+{
+    /// <summary>
+    /// Gets whether stream and episode operations can be requested
+    /// </summary>
+    public bool IsAvailable => Availability == PlaybackAvailability.Available;
+}
+
+/// <summary>
 /// Holds a rating and its vote count when the page provides them
 /// </summary>
 /// <param name="Value">
