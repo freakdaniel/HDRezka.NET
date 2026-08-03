@@ -170,6 +170,21 @@ Catalog cards expose structured years, countries, genres, card rating, and
 trailer availability. Person pages include biography and grouped filmography,
 while franchise parts include their order, year, rating, media ID, and URL
 
+For a lightweight home-screen feed and on-demand preview metadata, use the
+website's compact endpoints directly:
+
+```csharp
+var newest = await session.Catalog.GetNewestSliderAsync(MediaCategory.Series);
+var preview = await session.Catalog.GetQuickContentAsync(newest[0]);
+
+Console.WriteLine(preview.Title);
+Console.WriteLine(preview.Description);
+```
+
+`GetNewestSliderAsync` returns compact `CatalogItem` cards. Quick content is
+loaded only when requested, so enumerating a slider does not cause an implicit
+request for every item
+
 ## Internal rating
 
 The current aggregate HDRezka rating is loaded with the media page. An
@@ -483,6 +498,9 @@ var options = new ClientOptions();
 options.Headers["X-Custom-Header"] = "value";
 options.Proxy = new WebProxy("http://127.0.0.1:8080");
 options.MaxConcurrentRequests = 4;
+options.ResponseCacheDuration = TimeSpan.FromSeconds(15);
+options.MaxCachedResponses = 128;
+options.SecurityTokenCacheDuration = TimeSpan.FromSeconds(30);
 
 using var session = new Client(
     "https://your-mirror.example",
@@ -520,6 +538,13 @@ When supplying your own `HttpClient`, configure its handler if you need a
 proxy, while compressed responses are handled by the library and the injected
 client is never disposed
 
+Safe identical reads share an active request within one client, including when
+`ResponseCacheDuration` is zero. Setting a positive duration also retains
+successful responses for that period. Failed requests are never retained,
+caller cancellation does not cancel work still awaited by another caller, and
+session cookies are part of cache isolation. Successful mutations invalidate
+potentially stale retained reads
+
 ## HTTP and parsing
 
 The library does not run a browser and does not read a browser DOM. Every
@@ -530,6 +555,15 @@ operation uses `HttpClient`:
 - regular pages are downloaded as HTML and parsed in memory with AngleSharp
 - bulk page, translator, bookmark, and episode requests use limited
   asynchronous concurrency without creating dedicated threads
+- identical safe reads and stream resolutions share active work instead of
+  issuing duplicate requests
+
+The library emits `ActivitySource` traces and `Meter` instruments under the
+stable name exposed by `Diagnostics.ActivitySourceName` and
+`Diagnostics.MeterName`. Available metric names are
+`hdrezka.http.request.duration`, `hdrezka.http.response.body.duration`,
+`hdrezka.http.response.body.size`, `hdrezka.response.parse.duration`, and
+`hdrezka.cache.request.count`. Traces record the URL path but omit query values
 
 ## Architecture
 
@@ -546,7 +580,8 @@ projects or NuGet dependencies:
 - `Search`: search client and result models
 - `Exceptions`: public library exceptions
 - `Abstractions`: internal contracts shared by the client and parsers
-- `Http`: HTTP transport, `CookieContainer`, and response decompression
+- `Diagnostics`: tracing and metrics without an additional telemetry dependency
+- `Http`: HTTP transport, `CookieContainer`, response decompression, and safe request sharing
 - `Scraping`: AngleSharp page parsing and authentication page inspection
 - `Translators`: automatic translator ordering and selection
 

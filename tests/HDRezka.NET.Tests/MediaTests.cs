@@ -581,6 +581,50 @@ public sealed class MediaTests
     }
 
     [Fact]
+    public async Task GetStreamAsync_SharesActiveRequestWithoutSharingCallerCancellation()
+    {
+        var postRequests = 0;
+        var requestStarted = new TaskCompletionSource<bool>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseRequest = new TaskCompletionSource<bool>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        using var client = CreateClient(async (request, cancellationToken) =>
+        {
+            if (request.Method == HttpMethod.Get)
+            {
+                return StubHttpHandler.Html(MovieHtml);
+            }
+
+            Interlocked.Increment(ref postRequests);
+            requestStarted.TrySetResult(true);
+            await releaseRequest.Task.WaitAsync(cancellationToken);
+            return StubHttpHandler.Json(JsonSerializer.Serialize(new
+            {
+                success = true,
+                url = "[720p]https://cdn.test/shared.mp4"
+            }));
+        });
+        using var media = await Media.CreateAsync(
+            "https://hdrezka.test/films/123-test.html",
+            httpClient: client);
+
+        var survivingLoad = media.GetStreamAsync(translation: "56");
+        await requestStarted.Task;
+        using var cancellation = new CancellationTokenSource();
+        var canceledLoad = media.GetStreamAsync(
+            translation: "56",
+            cancellationToken: cancellation.Token);
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => canceledLoad);
+        releaseRequest.TrySetResult(true);
+        var stream = await survivingLoad;
+
+        Assert.Equal(1, postRequests);
+        Assert.Equal(new Uri("https://cdn.test/shared.mp4"), Assert.Single(stream.GetUrls("720")));
+    }
+
+    [Fact]
     public async Task GetStreamAsync_UsesFlagsFromNamedTranslatorVariant()
     {
         string? playerForm = null;

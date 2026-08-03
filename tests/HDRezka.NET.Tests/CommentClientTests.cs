@@ -202,6 +202,83 @@ public sealed class CommentClientTests
     }
 
     [Fact]
+    public async Task DeleteAsync_ReusesShortLivedSecurityToken()
+    {
+        var settingsRequests = 0;
+        var deleteRequests = 0;
+        using var httpClient = new HttpClient(new StubHttpHandler((request, _) =>
+        {
+            if (request.RequestUri!.AbsolutePath.EndsWith(".html", StringComparison.Ordinal))
+            {
+                return Task.FromResult(StubHttpHandler.Html(MediaHtml));
+            }
+
+            if (request.RequestUri.AbsolutePath == "/settings/")
+            {
+                settingsRequests++;
+                return Task.FromResult(StubHttpHandler.Html(SettingsFormHtml));
+            }
+
+            deleteRequests++;
+            return Task.FromResult(StubHttpHandler.Json("""{"success":true,"message":""}"""));
+        }));
+        using var media = await Media.CreateAsync(
+            "https://hdrezka.test/films/drama/123-test.html",
+            httpClient: httpClient);
+
+        await media.Comments.DeleteAsync(701);
+        await media.Comments.DeleteAsync(702);
+
+        Assert.Equal(1, settingsRequests);
+        Assert.Equal(2, deleteRequests);
+    }
+
+    [Fact]
+    public async Task DeleteAsync_RefreshesExplicitlyRejectedSecurityTokenOnce()
+    {
+        var settingsRequests = 0;
+        var deleteRequests = 0;
+        using var httpClient = new HttpClient(new StubHttpHandler((request, _) =>
+        {
+            if (request.RequestUri!.AbsolutePath.EndsWith(".html", StringComparison.Ordinal))
+            {
+                return Task.FromResult(StubHttpHandler.Html(MediaHtml));
+            }
+
+            if (request.RequestUri.AbsolutePath == "/settings/")
+            {
+                settingsRequests++;
+                return Task.FromResult(
+                    StubHttpHandler.Html(
+                        SettingsFormHtml.Replace(
+                            "delete-token",
+                            $"delete-token-{settingsRequests}",
+                            StringComparison.Ordinal)));
+            }
+
+            deleteRequests++;
+            if (deleteRequests == 1)
+            {
+                Assert.Contains("dle_allow_hash=delete-token-1", request.RequestUri.Query);
+                return Task.FromResult(
+                    StubHttpHandler.Json(
+                        """{"success":false,"message":"Security token expired"}"""));
+            }
+
+            Assert.Contains("dle_allow_hash=delete-token-2", request.RequestUri.Query);
+            return Task.FromResult(StubHttpHandler.Json("""{"success":true,"message":""}"""));
+        }));
+        using var media = await Media.CreateAsync(
+            "https://hdrezka.test/films/drama/123-test.html",
+            httpClient: httpClient);
+
+        await media.Comments.DeleteAsync(701);
+
+        Assert.Equal(2, settingsRequests);
+        Assert.Equal(2, deleteRequests);
+    }
+
+    [Fact]
     public async Task CommentLikes_ToggleAndLoadUsersThroughDirectEndpoints()
     {
         using var httpClient = new HttpClient(new StubHttpHandler((request, _) =>

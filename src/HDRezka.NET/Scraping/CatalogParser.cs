@@ -28,6 +28,16 @@ internal static partial class CatalogParser
             .Select(item => ParseItem(item, origin))
             .ToList();
 
+    public static async Task<IReadOnlyList<CatalogItem>> ParseItemsAsync(
+        string html,
+        Uri origin,
+        CancellationToken cancellationToken)
+    {
+        var document = await Parsing.ParseDocumentAsync(html, cancellationToken).ConfigureAwait(false);
+        Parsing.ThrowForChallengePage(document);
+        return ParseItems(document, origin);
+    }
+
     public static CatalogItem ParseItem(IElement item, Uri origin)
     {
         var link = item.QuerySelector(".b-content__inline_item-link a") ??

@@ -17,7 +17,8 @@ responsibilities are separated by directory:
 | `Search` | Fast and full catalog search |
 | `Exceptions` | Public library exception hierarchy |
 | `Abstractions` | Internal contracts shared by clients and parsers |
-| `Http` | Transport, cookies, headers, proxy behavior, and decompression |
+| `Diagnostics` | `ActivitySource` tracing and `Meter` instruments |
+| `Http` | Transport, cookies, headers, decompression, request sharing, and bounded TTL caching |
 | `Scraping` | AngleSharp parsing and authentication page inspection |
 | `Translators` | Translator ordering and automatic selection |
 

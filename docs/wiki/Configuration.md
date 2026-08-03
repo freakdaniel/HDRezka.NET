@@ -33,6 +33,56 @@ whole-season stream loading. Increasing it can reduce latency on a fast mirror
 but also increases the chance of throttling. Dedicated worker threads are not
 needed because HTTP waiting is asynchronous
 
+## Response caching and request sharing
+
+Identical safe reads share one active request within a client even when
+response retention is disabled. Retention is opt-in:
+
+```csharp
+var options = new ClientOptions
+{
+    ResponseCacheDuration = TimeSpan.FromSeconds(15),
+    MaxCachedResponses = 128,
+    SecurityTokenCacheDuration = TimeSpan.FromSeconds(30)
+};
+```
+
+`ResponseCacheDuration` defaults to zero, which keeps active-request sharing
+but does not retain a completed response. `MaxCachedResponses` defaults to 128
+and bounds completed entries. Only explicitly safe catalog, collection, media,
+and account reads participate. Failed requests are removed immediately
+
+Cache keys include the request and current session-cookie state. Changing
+authentication cookies therefore cannot reuse a response from another session.
+Successful mutations invalidate potentially stale reads. Cancellation stops
+only the caller's wait; it does not cancel shared work that another caller is
+still awaiting
+
+Protected account operations reuse only the parsed security token, not the
+whole settings page. `SecurityTokenCacheDuration` defaults to 30 seconds. A
+rejected token is refreshed and retried once only when the website explicitly
+reports a token or session-security error
+
+`TimeProvider` defaults to `TimeProvider.System` and can be replaced when an
+application needs a controlled clock for cache expiration tests
+
+## Diagnostics
+
+Subscribe to the BCL `ActivitySource` and `Meter` names exposed by
+`Diagnostics.ActivitySourceName` and `Diagnostics.MeterName`.
+Both currently use `HDRezka.NET`
+
+The library emits these instruments:
+
+- `hdrezka.http.request.duration`
+- `hdrezka.http.response.body.duration`
+- `hdrezka.http.response.body.size`
+- `hdrezka.response.parse.duration`
+- `hdrezka.cache.request.count`
+
+HTTP activities include the method, server, scheme, and URL path. Query values
+are deliberately omitted
+
 ## Headers
 
 `Headers` is a case-insensitive mutable dictionary with a

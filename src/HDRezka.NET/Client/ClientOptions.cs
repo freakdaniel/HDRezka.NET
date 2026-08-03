@@ -8,6 +8,9 @@ namespace HdRezka;
 public sealed class ClientOptions
 {
     private int _maxConcurrentRequests = 4;
+    private int _maxCachedResponses = 128;
+    private TimeSpan _responseCacheDuration;
+    private TimeSpan _securityTokenCacheDuration = TimeSpan.FromSeconds(30);
 
     /// <summary>
     /// Gets the browser-like user agent included in new option instances
@@ -77,6 +80,80 @@ public sealed class ClientOptions
     }
 
     /// <summary>
+    /// Gets or sets how long successful responses from explicitly cacheable read operations are retained
+    /// </summary>
+    /// <value>
+    /// A non-negative duration. The default value is <see cref="TimeSpan.Zero"/>, which disables retention
+    /// while still allowing concurrent callers to share an active request
+    /// </value>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// The assigned value is negative
+    /// </exception>
+    public TimeSpan ResponseCacheDuration
+    {
+        get => _responseCacheDuration;
+        set
+        {
+            ArgumentOutOfRangeException.ThrowIfLessThan(value, TimeSpan.Zero);
+            _responseCacheDuration = value;
+        }
+    }
+
+    /// <summary>
+    /// Gets or sets the maximum number of completed responses retained by this client
+    /// </summary>
+    /// <value>
+    /// Positive entry limit with a default value of <c>128</c>
+    /// </value>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// The assigned value is less than one
+    /// </exception>
+    public int MaxCachedResponses
+    {
+        get => _maxCachedResponses;
+        set
+        {
+            ArgumentOutOfRangeException.ThrowIfLessThan(value, 1);
+            _maxCachedResponses = value;
+        }
+    }
+
+    /// <summary>
+    /// Gets or sets how long the account security token used by protected operations is retained
+    /// </summary>
+    /// <value>
+    /// A non-negative duration with a default value of 30 seconds. A zero value disables retention
+    /// while still allowing concurrent callers to share an active token load
+    /// </value>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// The assigned value is negative
+    /// </exception>
+    public TimeSpan SecurityTokenCacheDuration
+    {
+        get => _securityTokenCacheDuration;
+        set
+        {
+            ArgumentOutOfRangeException.ThrowIfLessThan(value, TimeSpan.Zero);
+            _securityTokenCacheDuration = value;
+        }
+    }
+
+    /// <summary>
+    /// Gets or sets the clock used for response and security-token expiration
+    /// </summary>
+    /// <value>
+    /// Time provider used by this client, with <see cref="TimeProvider.System"/> as the default
+    /// </value>
+    /// <exception cref="ArgumentNullException">
+    /// The assigned value is <see langword="null"/>
+    /// </exception>
+    public TimeProvider TimeProvider
+    {
+        get;
+        set => field = value ?? throw new ArgumentNullException(nameof(value));
+    } = TimeProvider.System;
+
+    /// <summary>
     /// Gets translator identifiers placed first during automatic selection
     /// </summary>
     /// <value>
@@ -97,7 +174,11 @@ public sealed class ClientOptions
         var clone = new ClientOptions
         {
             Proxy = Proxy,
-            MaxConcurrentRequests = MaxConcurrentRequests
+            MaxConcurrentRequests = MaxConcurrentRequests,
+            ResponseCacheDuration = ResponseCacheDuration,
+            MaxCachedResponses = MaxCachedResponses,
+            SecurityTokenCacheDuration = SecurityTokenCacheDuration,
+            TimeProvider = TimeProvider
         };
         clone.Headers.Clear();
         foreach (var pair in Headers)

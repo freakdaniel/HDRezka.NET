@@ -107,6 +107,51 @@ public sealed class CatalogClientTests
         Assert.Single(result.Items);
     }
 
+    [Fact]
+    public async Task GetNewestSliderAsync_UsesCompactEndpointAndParsesCards()
+    {
+        using var httpClient = new HttpClient(new StubHttpHandler(async (request, cancellationToken) =>
+        {
+            Assert.Equal(HttpMethod.Post, request.Method);
+            Assert.Equal(
+                "/engine/ajax/get_newest_slider_content.php",
+                request.RequestUri!.AbsolutePath);
+            Assert.Equal("id=2", await request.Content!.ReadAsStringAsync(cancellationToken));
+            return StubHttpHandler.Html(CatalogHtml);
+        }));
+        using var client = new Client("https://hdrezka.test", httpClient: httpClient);
+
+        var result = await client.Catalog.GetNewestSliderAsync(MediaCategory.Series);
+
+        Assert.Equal("Test Series", Assert.Single(result).Title);
+    }
+
+    [Fact]
+    public async Task GetQuickContentAsync_ParsesCompactMetadata()
+    {
+        using var httpClient = new HttpClient(new StubHttpHandler(async (request, cancellationToken) =>
+        {
+            Assert.Equal(HttpMethod.Post, request.Method);
+            Assert.Equal("/engine/ajax/quick_content.php", request.RequestUri!.AbsolutePath);
+            var form = await request.Content!.ReadAsStringAsync(cancellationToken);
+            Assert.Contains("id=89179", form);
+            Assert.Contains("is_touch=1", form);
+            return StubHttpHandler.Html(QuickContentHtml);
+        }));
+        using var client = new Client("https://hdrezka.test", httpClient: httpClient);
+
+        var result = await client.Catalog.GetQuickContentAsync(89179);
+
+        Assert.Equal("Test Series", result.Title);
+        Assert.Equal(MediaCategory.Series, result.Category);
+        Assert.Equal(new Rating(8.93, 1771), result.Rating);
+        Assert.Equal("18+", result.AgeRating);
+        Assert.Equal("Drama", Assert.Single(result.Genres).Name);
+        Assert.Equal("Director", Assert.Single(result.Directors).Name);
+        Assert.Equal("Actor", Assert.Single(result.Cast).Name);
+        Assert.Equal(6.3, Assert.Single(result.ExternalRatings).Value);
+    }
+
     private const string CatalogHtml = """
         <!doctype html>
         <html>
@@ -131,5 +176,31 @@ public sealed class CatalogClientTests
           </div>
         </body>
         </html>
+        """;
+
+    private const string QuickContentHtml = """
+        <div class="b-content__catlabel series"><i class="entity">Series</i></div>
+        <div class="b-content__bubble_title">
+          <a href="/series/drama/89179-test.html">Test Series</a>
+        </div>
+        <div class="b-content__bubble_rating">
+          <span class="label">Rating:</span><b>8.93</b> (1 771)
+        </div>
+        <div class="b-content__bubble_text">Compact description</div>
+        <div class="b-content__bubble_text">
+          <span class="label">Age:</span><b>18+</b>
+        </div>
+        <div class="b-content__bubble_text">
+          <span class="label">Genre:</span><a href="/series/drama/">Drama</a>
+        </div>
+        <div class="b-content__bubble_str">
+          <span itemprop="director" data-id="10"><a href="/person/10-director/">Director</a></span>
+        </div>
+        <div class="b-content__bubble_str">
+          <span itemprop="actor" data-id="11"><a href="/person/11-actor/">Actor</a></span>
+        </div>
+        <div class="b-content__bubble_rates">
+          <span class="imdb">IMDb: <b>6.3</b><i>(150 701)</i></span>
+        </div>
         """;
 }

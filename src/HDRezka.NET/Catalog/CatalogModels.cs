@@ -128,3 +128,52 @@ public sealed record CatalogItem(
     /// </summary>
     public bool HasTrailer { get; init; }
 }
+
+/// <summary>
+/// Holds compact media metadata returned by the website hover-preview endpoint
+/// </summary>
+/// <param name="Id">
+/// Numeric media identifier used to request the preview
+/// </param>
+/// <param name="Title">
+/// Localized media title
+/// </param>
+/// <param name="Url">
+/// Absolute full media page URL
+/// </param>
+/// <param name="Category">
+/// Media category inferred from the preview URL
+/// </param>
+/// <param name="Description">
+/// Short description returned by the compact endpoint
+/// </param>
+/// <param name="Rating">
+/// Internal HDRezka rating and vote count
+/// </param>
+/// <param name="AgeRating">
+/// Age restriction such as <c>18+</c>, or <see langword="null"/> when unavailable
+/// </param>
+/// <param name="Genres">
+/// Genres linked from the preview
+/// </param>
+/// <param name="Directors">
+/// Directors linked from the preview
+/// </param>
+/// <param name="Cast">
+/// Actors linked from the preview
+/// </param>
+/// <param name="ExternalRatings">
+/// Ratings imported from external services
+/// </param>
+public sealed record QuickContent(
+    int Id,
+    string Title,
+    Uri Url,
+    MediaCategory Category,
+    string Description,
+    Rating Rating,
+    string? AgeRating,
+    IReadOnlyList<NamedLink> Genres,
+    IReadOnlyList<PersonInfo> Directors,
+    IReadOnlyList<PersonInfo> Cast,
+    IReadOnlyList<ExternalRating> ExternalRatings);

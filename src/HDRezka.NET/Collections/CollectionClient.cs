@@ -58,7 +58,7 @@ public sealed partial class CollectionClient
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(page, 1);
         var path = page == 1 ? "/collections/" : $"/collections/page/{page}/";
-        var html = await _transport.GetStringAsync(
+        var html = await _transport.GetSharedStringAsync(
             new Uri(_origin, path),
             cancellationToken: cancellationToken).ConfigureAwait(false);
         return await CollectionParser.ParseDirectoryAsync(
@@ -119,7 +119,7 @@ public sealed partial class CollectionClient
         var pageUri = page == 1
             ? collectionUri
             : new Uri(collectionUri, $"page/{page}/");
-        var html = await _transport.GetStringAsync(
+        var html = await _transport.GetSharedStringAsync(
             pageUri,
             cancellationToken: cancellationToken).ConfigureAwait(false);
         return await CollectionParser.ParseCollectionAsync(

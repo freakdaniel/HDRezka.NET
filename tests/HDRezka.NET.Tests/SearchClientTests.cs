@@ -42,6 +42,8 @@ public sealed class SearchClientTests
     {
         var active = 0;
         var maximumActive = 0;
+        var bothRemainingPagesStarted = new TaskCompletionSource<bool>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
         using var httpClient = new HttpClient(new StubHttpHandler(async (request, cancellationToken) =>
         {
             var query = request.RequestUri!.Query;
@@ -54,7 +56,12 @@ public sealed class SearchClientTests
             {
                 var current = Interlocked.Increment(ref active);
                 maximumActive = Math.Max(maximumActive, current);
-                await Task.Delay(30, cancellationToken);
+                if (current == 2)
+                {
+                    bothRemainingPagesStarted.TrySetResult(true);
+                }
+
+                await bothRemainingPagesStarted.Task.WaitAsync(cancellationToken);
                 Interlocked.Decrement(ref active);
             }
 

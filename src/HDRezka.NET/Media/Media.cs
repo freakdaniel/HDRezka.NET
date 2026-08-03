@@ -22,7 +22,7 @@ public sealed class Media : IDisposable
     private readonly SemaphoreSlim _bookmarkMutationLock = new(1, 1);
     private readonly HashSet<long> _bookmarkFolderIds;
     private readonly Dictionary<TranslatorKey, Task<SeriesInfo?>> _seriesInfoByTranslator = [];
-    private readonly Dictionary<StreamKey, MediaStream> _streamCache = [];
+    private readonly Dictionary<StreamKey, Task<MediaStream>> _streamTasks = [];
     private Task<IReadOnlyDictionary<int, SeriesInfo>>? _seriesInfoTask;
     private Task<IReadOnlyList<Season>>? _episodesInfoTask;
 
@@ -252,6 +252,7 @@ public sealed class Media : IDisposable
         }
 
         Rating = new Rating(ratingValue, votes);
+        _transport.InvalidateResponseCache();
         return Rating;
     }
 
@@ -461,6 +462,7 @@ public sealed class Media : IDisposable
                 GetString(response.Message) ?? "The schedule watched state could not be changed.");
         }
 
+        _transport.InvalidateResponseCache();
         return entry with { IsWatched = isWatched };
     }
 
@@ -601,7 +603,9 @@ public sealed class Media : IDisposable
         CancellationToken cancellationToken)
     {
         var normalizedUrl = NormalizeContentUri(url);
-        var html = await transport.GetStringAsync(normalizedUrl, cancellationToken: cancellationToken)
+        var html = await transport.GetSharedStringAsync(
+            normalizedUrl,
+            cancellationToken: cancellationToken)
             .ConfigureAwait(false);
         IScraper scraper = new Scraper();
         var page = await scraper.ParseMediaPageAsync(html, normalizedUrl, cancellationToken)
@@ -1290,14 +1294,48 @@ public sealed class Media : IDisposable
     {
         ThrowIfPremiumTranslationUnavailable(translator);
         var key = new StreamKey(CreateTranslatorKey(translator), season, episode);
+        Task<MediaStream> task;
         lock (_cacheLock)
         {
-            if (_streamCache.TryGetValue(key, out var cached))
+            if (!_streamTasks.TryGetValue(key, out task!))
             {
-                return cached;
+                task = LoadStreamAsync(
+                    season,
+                    episode,
+                    translator,
+                    action,
+                    _transport.LifetimeToken);
+                _streamTasks[key] = task;
             }
         }
 
+        try
+        {
+            return await task.WaitAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch
+        {
+            lock (_cacheLock)
+            {
+                if (_streamTasks.TryGetValue(key, out var cached) &&
+                    ReferenceEquals(cached, task) &&
+                    task.IsCompleted)
+                {
+                    _streamTasks.Remove(key);
+                }
+            }
+
+            throw;
+        }
+    }
+
+    private async Task<MediaStream> LoadStreamAsync(
+        int? season,
+        int? episode,
+        Translator translator,
+        string action,
+        CancellationToken cancellationToken)
+    {
         var response = await _transport.PostFormJsonAsync<PlayerResponse>(
             CreatePlayerUri(),
             CreatePlayerData(translator, action, season, episode),
@@ -1309,9 +1347,7 @@ public sealed class Media : IDisposable
             throw new StreamFetchException();
         }
 
-        var stream = ParseStreamResponse(response, season, episode, translator);
-        CacheStream(stream, translator);
-        return stream;
+        return ParseStreamResponse(response, season, episode, translator);
     }
 
     private async Task<(Translator Translator, SeriesInfo Info)> FindSeriesTranslatorAsync(
@@ -1522,10 +1558,16 @@ public sealed class Media : IDisposable
     {
         lock (_cacheLock)
         {
-            _streamCache[new StreamKey(
+            var key = new StreamKey(
                 CreateTranslatorKey(translator),
                 stream.Season,
-                stream.Episode)] = stream;
+                stream.Episode);
+            if (!_streamTasks.TryGetValue(key, out var current) ||
+                current.IsCanceled ||
+                current.IsFaulted)
+            {
+                _streamTasks[key] = Task.FromResult(stream);
+            }
         }
     }
 

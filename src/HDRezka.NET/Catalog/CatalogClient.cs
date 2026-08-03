@@ -220,7 +220,7 @@ public sealed class CatalogClient
         ArgumentOutOfRangeException.ThrowIfLessThan(page, 1);
         var genre = GetGenre(category);
         var path = page == 1 ? "/" : $"/page/{page}/";
-        var html = await _transport.GetStringAsync(
+        var html = await _transport.GetSharedStringAsync(
             new Uri(_origin, path),
             new Dictionary<string, string?>
             {
@@ -537,6 +537,117 @@ public sealed class CatalogClient
             query: null,
             cancellationToken: cancellationToken);
 
+    /// <summary>
+    /// Loads the compact newest-media slider shown on the website home page
+    /// </summary>
+    /// <param name="category">
+    /// Media category to include, or <see cref="MediaCategory.Unknown"/> to include every supported category
+    /// </param>
+    /// <param name="cancellationToken">
+    /// Token used to cancel waiting for the shared request and response parsing
+    /// </param>
+    /// <returns>
+    /// Compact media cards in website order
+    /// </returns>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// <paramref name="category"/> is not supported by the slider endpoint
+    /// </exception>
+    public async Task<IReadOnlyList<CatalogItem>> GetNewestSliderAsync(
+        MediaCategory category = MediaCategory.Unknown,
+        CancellationToken cancellationToken = default)
+    {
+        var categoryId = category switch
+        {
+            MediaCategory.Unknown => 0,
+            MediaCategory.Film => 1,
+            MediaCategory.Series => 2,
+            MediaCategory.Cartoon => 3,
+            MediaCategory.Anime => 82,
+            _ => throw new ArgumentOutOfRangeException(nameof(category))
+        };
+        var html = await _transport.PostSharedFormAsync(
+            new Uri(_origin, "/engine/ajax/get_newest_slider_content.php"),
+            new Dictionary<string, string>
+            {
+                ["id"] = categoryId.ToString(System.Globalization.CultureInfo.InvariantCulture)
+            },
+            cancellationToken,
+            _origin).ConfigureAwait(false);
+        return await CatalogParser.ParseItemsAsync(
+            html,
+            _origin,
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Loads compact hover-preview metadata for one catalog item
+    /// </summary>
+    /// <param name="item">
+    /// Catalog item containing the numeric media identifier
+    /// </param>
+    /// <param name="cancellationToken">
+    /// Token used to cancel waiting for the shared request and response parsing
+    /// </param>
+    /// <returns>
+    /// Compact media metadata returned by the website
+    /// </returns>
+    /// <exception cref="ArgumentNullException">
+    /// <paramref name="item"/> is <see langword="null"/>
+    /// </exception>
+    /// <exception cref="ArgumentException">
+    /// <paramref name="item"/> does not expose a numeric media identifier
+    /// </exception>
+    public Task<QuickContent> GetQuickContentAsync(
+        CatalogItem item,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(item);
+        if (!item.Id.HasValue)
+        {
+            throw new ArgumentException(
+                "The catalog item must expose a numeric media identifier.",
+                nameof(item));
+        }
+
+        return GetQuickContentAsync(item.Id.Value, cancellationToken);
+    }
+
+    /// <summary>
+    /// Loads compact hover-preview metadata for a media identifier
+    /// </summary>
+    /// <param name="mediaId">
+    /// Positive numeric media identifier
+    /// </param>
+    /// <param name="cancellationToken">
+    /// Token used to cancel waiting for the shared request and response parsing
+    /// </param>
+    /// <returns>
+    /// Compact media metadata returned by the website
+    /// </returns>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// <paramref name="mediaId"/> is not positive
+    /// </exception>
+    public async Task<QuickContent> GetQuickContentAsync(
+        int mediaId,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(mediaId, 1);
+        var html = await _transport.PostSharedFormAsync(
+            new Uri(_origin, "/engine/ajax/quick_content.php"),
+            new Dictionary<string, string>
+            {
+                ["id"] = mediaId.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                ["is_touch"] = "1"
+            },
+            cancellationToken,
+            _origin).ConfigureAwait(false);
+        return await QuickContentParser.ParseAsync(
+            html,
+            _origin,
+            mediaId,
+            cancellationToken).ConfigureAwait(false);
+    }
+
     private async Task<PageResult<CatalogItem>> LoadListingAsync(
         string rootPath,
         int page,
@@ -547,7 +658,7 @@ public sealed class CatalogClient
         var path = page == 1
             ? rootPath
             : $"{rootPath}page/{page}/";
-        var html = await _transport.GetStringAsync(
+        var html = await _transport.GetSharedStringAsync(
             new Uri(_origin, path),
             query,
             cancellationToken).ConfigureAwait(false);

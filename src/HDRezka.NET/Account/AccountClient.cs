@@ -50,7 +50,7 @@ public sealed partial class AccountClient
     public async Task<AccountProfile> GetProfileAsync(
         CancellationToken cancellationToken = default)
     {
-        var html = await _transport.GetStringAsync(
+        var html = await _transport.GetSharedStringAsync(
             new Uri(_origin, "/settings/"),
             cancellationToken: cancellationToken).ConfigureAwait(false);
         return await AccountParser.ParseProfileAsync(
@@ -130,8 +130,10 @@ public sealed partial class AccountClient
             },
             cancellationToken,
             form.Action).ConfigureAwait(false);
-        return await AccountParser.ParseUpdateResponseAsync(html, cancellationToken)
+        var result = await AccountParser.ParseUpdateResponseAsync(html, cancellationToken)
             .ConfigureAwait(false);
+        _transport.InvalidateResponseCache();
+        return result;
     }
 
     /// <summary>
@@ -255,6 +257,7 @@ public sealed partial class AccountClient
             throw new ParseException("The avatar crop response has no generated image URL.");
         }
 
+        _transport.InvalidateResponseCache();
         return new AvatarUpdateResult(
             new Uri(_origin, cropResponse.Small),
             upload.ImageOriginalWidth,
@@ -312,8 +315,10 @@ public sealed partial class AccountClient
             },
             cancellationToken,
             form.Action).ConfigureAwait(false);
-        return await AccountParser.ParseUpdateResponseAsync(html, cancellationToken)
+        var result = await AccountParser.ParseUpdateResponseAsync(html, cancellationToken)
             .ConfigureAwait(false);
+        _transport.InvalidateResponseCache();
+        return result;
     }
 
     /// <summary>
@@ -346,7 +351,7 @@ public sealed partial class AccountClient
     public async Task<IReadOnlyList<ContinueWatchingEntry>> GetContinueWatchingAsync(
         CancellationToken cancellationToken = default)
     {
-        var html = await _transport.GetStringAsync(
+        var html = await _transport.GetSharedStringAsync(
             new Uri(_origin, "/continue/"),
             cancellationToken: cancellationToken).ConfigureAwait(false);
         return await AccountParser.ParseContinueWatchingAsync(
@@ -717,7 +722,7 @@ public sealed partial class AccountClient
         }
         else
         {
-            var html = await _transport.GetStringAsync(
+            var html = await _transport.GetSharedStringAsync(
                 folder.Url,
                 cancellationToken: cancellationToken).ConfigureAwait(false);
             var page = await AccountParser.ParseBookmarksAsync(
@@ -771,6 +776,7 @@ public sealed partial class AccountClient
                     : response.Message.Trim());
         }
 
+        _transport.InvalidateResponseCache();
         return response;
     }
 

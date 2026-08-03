@@ -148,7 +148,7 @@ public sealed class PersonClient
             throw new ArgumentException("The URL must identify a person page.", nameof(url));
         }
 
-        var html = await _transport.GetStringAsync(
+        var html = await _transport.GetSharedStringAsync(
             resolved,
             cancellationToken: cancellationToken).ConfigureAwait(false);
         return await PersonParser.ParseAsync(

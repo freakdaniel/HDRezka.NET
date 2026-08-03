@@ -19,6 +19,82 @@ public sealed class ClientTests
     }
 
     [Fact]
+    public async Task GetAsync_SharesActiveLoadWithoutSharingCallerCancellation()
+    {
+        var requests = 0;
+        var requestStarted = new TaskCompletionSource<bool>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseRequest = new TaskCompletionSource<bool>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        using var httpClient = new HttpClient(new StubHttpHandler(async (_, cancellationToken) =>
+        {
+            Interlocked.Increment(ref requests);
+            requestStarted.TrySetResult(true);
+            await releaseRequest.Task.WaitAsync(cancellationToken);
+            return StubHttpHandler.Html(PageHtml);
+        }));
+        using var client = new Client("https://mirror.test", httpClient: httpClient);
+
+        var survivingLoad = client.GetAsync("/films/42-title.html");
+        await requestStarted.Task;
+        using var cancellation = new CancellationTokenSource();
+        var canceledLoad = client.GetAsync("/films/42-title.html", cancellation.Token);
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => canceledLoad);
+        releaseRequest.TrySetResult(true);
+        using var media = await survivingLoad;
+
+        Assert.Equal(1, requests);
+        Assert.Equal("Title", media.Name);
+    }
+
+    [Fact]
+    public async Task GetAsync_RetainsResponsesUntilConfiguredExpiration()
+    {
+        var requests = 0;
+        var timeProvider = new ManualTimeProvider();
+        using var httpClient = new HttpClient(new StubHttpHandler((_, _) =>
+        {
+            requests++;
+            return Task.FromResult(StubHttpHandler.Html(PageHtml));
+        }));
+        var options = new ClientOptions
+        {
+            ResponseCacheDuration = TimeSpan.FromMinutes(1),
+            TimeProvider = timeProvider
+        };
+        using var client = new Client("https://mirror.test", options, httpClient);
+
+        using var first = await client.GetAsync("/films/42-title.html");
+        using var second = await client.GetAsync("/films/42-title.html");
+        timeProvider.Advance(TimeSpan.FromMinutes(2));
+        using var expired = await client.GetAsync("/films/42-title.html");
+
+        Assert.Equal(2, requests);
+        Assert.NotSame(first, second);
+    }
+
+    [Fact]
+    public async Task GetAsync_DoesNotReuseCachedResponseAfterCookieChange()
+    {
+        var requests = 0;
+        using var httpClient = new HttpClient(new StubHttpHandler((_, _) =>
+        {
+            requests++;
+            return Task.FromResult(StubHttpHandler.Html(PageHtml));
+        }));
+        var options = new ClientOptions { ResponseCacheDuration = TimeSpan.FromMinutes(1) };
+        using var client = new Client("https://mirror.test", options, httpClient);
+
+        using var first = await client.GetAsync("/films/42-title.html");
+        client.Options.Cookies["dle_user_id"] = "different-account";
+        using var second = await client.GetAsync("/films/42-title.html");
+
+        Assert.Equal(2, requests);
+    }
+
+    [Fact]
     public async Task LoginAsync_CapturesCookiesAndVerifiesAuthenticatedPage()
     {
         using var httpClient = new HttpClient(new StubHttpHandler(async (request, cancellationToken) =>
@@ -195,4 +271,13 @@ public sealed class ClientTests
         </body>
         </html>
         """;
+
+    private sealed class ManualTimeProvider : TimeProvider
+    {
+        private DateTimeOffset _utcNow = DateTimeOffset.UnixEpoch;
+
+        public override DateTimeOffset GetUtcNow() => _utcNow;
+
+        public void Advance(TimeSpan duration) => _utcNow += duration;
+    }
 }

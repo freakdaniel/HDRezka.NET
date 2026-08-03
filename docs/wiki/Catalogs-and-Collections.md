@@ -47,6 +47,37 @@ supports films, series, cartoons, and anime. Shows are available through
 `GetShowsAsync`. An unsupported category or a page
 number below one causes `ArgumentOutOfRangeException`.
 
+## Compact slider and previews
+
+Use the compact home-page endpoint when a full paginated section is not
+required:
+
+```csharp
+var newest = await client.Catalog.GetNewestSliderAsync(MediaCategory.Series);
+
+foreach (var item in newest)
+{
+    Console.WriteLine($"{item.Title}: {item.Url}");
+}
+```
+
+The supported filters are `Unknown`, `Film`, `Series`, `Cartoon`, and `Anime`.
+The result is a website-ordered list of `CatalogItem` cards
+
+Load hover-preview metadata explicitly for a selected card or numeric media ID:
+
+```csharp
+var preview = await client.Catalog.GetQuickContentAsync(newest[0]);
+var samePreview = await client.Catalog.GetQuickContentAsync(preview.Id);
+
+Console.WriteLine(preview.Description);
+Console.WriteLine(preview.Rating.Value);
+```
+
+`QuickContent` exposes the title, URL, category, description, internal and
+external ratings, age rating, genres, directors, and cast. Slider results are
+not enriched automatically, avoiding an implicit N+1 request pattern
+
 ## Genre, year, country, and best-rating directories
 
 ```csharp

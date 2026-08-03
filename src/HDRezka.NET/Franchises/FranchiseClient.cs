@@ -58,7 +58,7 @@ public sealed partial class FranchiseClient
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(page, 1);
         var path = page == 1 ? "/franchises/" : $"/franchises/page/{page}/";
-        var html = await _transport.GetStringAsync(
+        var html = await _transport.GetSharedStringAsync(
             new Uri(_origin, path),
             cancellationToken: cancellationToken).ConfigureAwait(false);
         return await FranchiseParser.ParseDirectoryAsync(
@@ -165,7 +165,7 @@ public sealed partial class FranchiseClient
             match.Groups["id"].Value,
             NumberStyles.Integer,
             CultureInfo.InvariantCulture);
-        var html = await _transport.GetStringAsync(
+        var html = await _transport.GetSharedStringAsync(
             resolved,
             cancellationToken: cancellationToken).ConfigureAwait(false);
         return await FranchiseParser.ParseAsync(

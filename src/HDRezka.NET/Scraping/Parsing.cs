@@ -4,6 +4,7 @@ using System.Text.RegularExpressions;
 using AngleSharp.Dom;
 using AngleSharp.Html.Parser;
 using HdRezka.Abstractions;
+using HdRezka.Observability;
 
 namespace HdRezka.Scraping;
 
@@ -13,8 +14,25 @@ internal static partial class Parsing
         string html,
         CancellationToken cancellationToken = default)
     {
-        var parser = new HtmlParser();
-        return await parser.ParseDocumentAsync(html, cancellationToken).ConfigureAwait(false);
+        var started = System.Diagnostics.Stopwatch.GetTimestamp();
+        try
+        {
+            var parser = new HtmlParser();
+            var document = await parser.ParseDocumentAsync(html, cancellationToken).ConfigureAwait(false);
+            Telemetry.ParseCompleted(
+                "html",
+                System.Diagnostics.Stopwatch.GetElapsedTime(started),
+                succeeded: true);
+            return document;
+        }
+        catch
+        {
+            Telemetry.ParseCompleted(
+                "html",
+                System.Diagnostics.Stopwatch.GetElapsedTime(started),
+                succeeded: false);
+            throw;
+        }
     }
 
     public static void ThrowForChallengePage(IDocument document)

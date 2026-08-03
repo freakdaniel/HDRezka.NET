@@ -118,8 +118,10 @@ public sealed partial class AccountClient
             },
             cancellationToken,
             form.Action).ConfigureAwait(false);
-        return await AccountParser.ParseUpdateResponseAsync(html, cancellationToken)
+        var result = await AccountParser.ParseUpdateResponseAsync(html, cancellationToken)
             .ConfigureAwait(false);
+        _transport.InvalidateResponseCache();
+        return result;
     }
 
     /// <summary>
@@ -152,7 +154,7 @@ public sealed partial class AccountClient
     public async Task<PlaybackPreferences> GetPlaybackPreferencesAsync(
         CancellationToken cancellationToken = default)
     {
-        var html = await _transport.GetStringAsync(
+        var html = await _transport.GetSharedStringAsync(
             new Uri(_origin, "/settings/personality/"),
             cancellationToken: cancellationToken).ConfigureAwait(false);
         return await AccountParser.ParsePreferencesAsync(html, cancellationToken)
@@ -218,8 +220,10 @@ public sealed partial class AccountClient
             data,
             cancellationToken,
             form.Action).ConfigureAwait(false);
-        return await AccountParser.ParseUpdateResponseAsync(html, cancellationToken)
+        var result = await AccountParser.ParseUpdateResponseAsync(html, cancellationToken)
             .ConfigureAwait(false);
+        _transport.InvalidateResponseCache();
+        return result;
     }
 
     /// <summary>
@@ -252,7 +256,7 @@ public sealed partial class AccountClient
     public async Task<IReadOnlyList<PaymentHistoryEntry>> GetPaymentHistoryAsync(
         CancellationToken cancellationToken = default)
     {
-        var html = await _transport.GetStringAsync(
+        var html = await _transport.GetSharedStringAsync(
             new Uri(_origin, "/payments/history/"),
             cancellationToken: cancellationToken).ConfigureAwait(false);
         return await PaymentParser.ParseHistoryAsync(
@@ -305,7 +309,7 @@ public sealed partial class AccountClient
             throw new ArgumentException("The currency selector must contain two ASCII letters.", nameof(currency));
         }
 
-        var html = await _transport.GetStringAsync(
+        var html = await _transport.GetSharedStringAsync(
             new Uri(_origin, "/payments/"),
             normalized is null ? null : new Dictionary<string, string?> { ["currency"] = normalized },
             cancellationToken).ConfigureAwait(false);
@@ -357,7 +361,7 @@ public sealed partial class AccountClient
     {
         ArgumentNullException.ThrowIfNull(query);
         var queryValues = CreateBookmarkQuery(query);
-        var html = await _transport.GetStringAsync(
+        var html = await _transport.GetSharedStringAsync(
             new Uri(_origin, "/favorites/"),
             queryValues,
             cancellationToken).ConfigureAwait(false);
@@ -685,7 +689,7 @@ public sealed partial class AccountClient
         }
         else
         {
-            var html = await _transport.GetStringAsync(folder.Url, query, cancellationToken)
+            var html = await _transport.GetSharedStringAsync(folder.Url, query, cancellationToken)
                 .ConfigureAwait(false);
             var page = await AccountParser.ParseBookmarksAsync(
                 html,
@@ -726,6 +730,7 @@ public sealed partial class AccountClient
                 string.IsNullOrWhiteSpace(response.Message) ? defaultError : response.Message.Trim());
         }
 
+        _transport.InvalidateResponseCache();
         return response;
     }
 

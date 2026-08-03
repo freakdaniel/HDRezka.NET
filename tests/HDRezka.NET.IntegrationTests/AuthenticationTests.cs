@@ -144,6 +144,7 @@ public sealed class AuthenticationTests
         Assert.NotEmpty(collections.Items);
         CollectionPage? collection = null;
         CollectionSummary? loadedCollection = null;
+        var missingCollectionCount = 0;
         foreach (var item in collections.Items.Take(10))
         {
             try
@@ -156,12 +157,14 @@ public sealed class AuthenticationTests
             {
                 // The authenticated collection directory can temporarily contain links
                 // that the same authenticated session receives as 404
+                missingCollectionCount++;
             }
         }
 
-        Assert.NotNull(collection);
-        Assert.NotNull(loadedCollection);
-        Assert.Equal(loadedCollection.Id, collection.Id);
+        Assert.True(
+            collection is not null && loadedCollection is not null,
+            $"No reachable collection was found after {missingCollectionCount} missing links.");
+        Assert.Equal(loadedCollection!.Id, collection!.Id);
         Assert.NotEmpty(collection.Items);
 
         using var media = await client.GetAsync(mediaPath);

@@ -215,23 +215,47 @@ public sealed class CommentClient
         CancellationToken cancellationToken = default)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(commentId, 1);
-        var settingsHtml = await _transport.GetStringAsync(
-            new Uri(_origin, "/settings/"),
-            cancellationToken: cancellationToken).ConfigureAwait(false);
-        var form = await AccountParser.ParseUpdateFormAsync(
-            settingsHtml,
-            _origin,
-            cancellationToken).ConfigureAwait(false);
-        var responseText = await _transport.GetStringAsync(
-            new Uri(_origin, "/engine/ajax/deletecomments.php"),
-            new Dictionary<string, string?>
+        for (var attempt = 0; attempt < 2; attempt++)
+        {
+            var securityToken = await _transport.GetSecurityTokenAsync(
+                _origin,
+                forceRefresh: attempt > 0,
+                cancellationToken).ConfigureAwait(false);
+            var responseText = await _transport.GetStringAsync(
+                new Uri(_origin, "/engine/ajax/deletecomments.php"),
+                new Dictionary<string, string?>
+                {
+                    ["id"] = commentId.ToString(CultureInfo.InvariantCulture),
+                    ["dle_allow_hash"] = securityToken,
+                    ["type"] = "0",
+                    ["area"] = "ajax"
+                },
+                cancellationToken).ConfigureAwait(false);
+            var response = ParseDeleteResponse(responseText);
+            if (response.Success)
             {
-                ["id"] = commentId.ToString(CultureInfo.InvariantCulture),
-                ["dle_allow_hash"] = form.SecurityToken,
-                ["type"] = "0",
-                ["area"] = "ajax"
-            },
-            cancellationToken).ConfigureAwait(false);
+                _transport.InvalidateResponseCache();
+                return;
+            }
+
+            var message = await ParseMessageAsync(response.Message, cancellationToken)
+                .ConfigureAwait(false);
+            if (attempt == 0 && IsSecurityTokenRejected(message))
+            {
+                continue;
+            }
+
+            throw new CommentOperationException(
+                string.IsNullOrWhiteSpace(message)
+                    ? "The website rejected comment deletion."
+                    : message);
+        }
+
+        throw new CommentOperationException("The website rejected comment deletion.");
+    }
+
+    private static CommentDeleteResponse ParseDeleteResponse(string responseText)
+    {
         CommentDeleteResponse? response;
         try
         {
@@ -256,16 +280,16 @@ public sealed class CommentClient
             throw new ParseException("The comment deletion response is empty.");
         }
 
-        if (!response.Success)
-        {
-            var message = await ParseMessageAsync(response.Message, cancellationToken)
-                .ConfigureAwait(false);
-            throw new CommentOperationException(
-                string.IsNullOrWhiteSpace(message)
-                    ? "The website rejected comment deletion."
-                    : message);
-        }
+        return response;
     }
+
+    private static bool IsSecurityTokenRejected(string? message) =>
+        !string.IsNullOrWhiteSpace(message) &&
+        (message.Contains("token", StringComparison.OrdinalIgnoreCase) ||
+         message.Contains("security", StringComparison.OrdinalIgnoreCase) ||
+         message.Contains("hash", StringComparison.OrdinalIgnoreCase) ||
+         message.Contains("\u0441\u0435\u0441\u0441", StringComparison.OrdinalIgnoreCase) ||
+         message.Contains("\u0431\u0435\u0437\u043e\u043f\u0430\u0441", StringComparison.OrdinalIgnoreCase));
 
     /// <summary>
     /// Toggles the authenticated account's like on a comment
